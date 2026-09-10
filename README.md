@@ -17,12 +17,17 @@ proof, and check whether a payout is cleared — all from TypeScript.
 
 | API | Status |
 |-----|--------|
-| `getPolicy(corridorId)` | ✅ live — reads the on-chain `CorridorPolicy` from the deployed registry |
-| `isCleared(corridorId, nullifier)` | ✅ live — the payout gate; reads the attestation contract |
-| `passes(corridorId)` | ✅ live — aggregate pass count |
-| `buildWitness(cred, policy, disclosure, {corridorId, now})` | ✅ local — assembles the 9-field public vector + private witness; Poseidon2 pinned to the circuit by a shared test vector |
-| `requestProof(witness)` | needs a local Noir prover endpoint (`proverUrl`) — M3 |
+| `getPolicy(corridorId)` | ✅ live — the on-chain `CorridorPolicy` |
+| `isCleared(corridorId, nullifier)` | ✅ live — the payout gate |
+| `passes(corridorId)` / `passRecord(corridorId, nullifier)` | ✅ live — aggregate count / full record |
+| `buildWitness(cred, policy, disclosure, {corridorId, now})` | ✅ local — the 9-field public vector + private witness; Poseidon2 pinned to the circuit |
+| `verifyWitnessLocally(witness)` | ✅ local — re-runs every circuit constraint in TS before proving |
+| `makeFixture` / `toProverToml` | ✅ local — build a test tree, emit a Noir `Prover.toml` |
+| `requestProof(witness)` | needs a local Noir prover (`proverUrl`) — M3 |
 | `enter(corridorId, proof)` | needs a fee-sponsoring relayer (`relayerUrl`) — M6 |
+
+Config: `TESTNET` / `MAINNET` presets, `Corridor.fromEnv()`, or pass your own
+`CorridorConfig`. Runnable examples in [`examples/`](./examples).
 
 ## Install
 
