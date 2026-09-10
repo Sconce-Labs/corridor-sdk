@@ -8,9 +8,8 @@
 
 import type { Bytes32, CorridorPolicy, CredentialMaterial } from "./types.js";
 import { toBytes32, bytes32ToBigInt } from "./hex.js";
-import { poseidon2, leBits } from "./witness.js";
-
-const DEPTH = 32;
+import { poseidon2 } from "./poseidon.js";
+import { SparseTree, leBits, DEPTH } from "./merkle.js";
 
 export interface CredentialAttrs {
   holderSecret: bigint;
@@ -30,53 +29,6 @@ export function commitmentOf(a: CredentialAttrs): bigint {
   ]);
 }
 
-/** A sparse Merkle tree over `DEPTH` bits, empty leaf = 0. */
-class SparseTree {
-  private nodes = new Map<string, bigint>(); // "level:index" -> value
-  private zero: bigint[] = [];
-
-  constructor() {
-    this.zero[0] = 0n;
-    for (let i = 1; i <= DEPTH; i++)
-      this.zero[i] = poseidon2([this.zero[i - 1]!, this.zero[i - 1]!]);
-  }
-
-  private get(level: number, index: bigint): bigint {
-    return this.nodes.get(`${level}:${index}`) ?? this.zero[level]!;
-  }
-
-  insert(index: bigint, leaf: bigint): void {
-    let idx = index;
-    this.nodes.set(`0:${idx}`, leaf);
-    for (let lvl = 0; lvl < DEPTH; lvl++) {
-      const sib = idx ^ 1n;
-      const [l, r] =
-        idx % 2n === 0n
-          ? [this.get(lvl, idx), this.get(lvl, sib)]
-          : [this.get(lvl, sib), this.get(lvl, idx)];
-      idx >>= 1n;
-      this.nodes.set(`${lvl + 1}:${idx}`, poseidon2([l, r]));
-    }
-  }
-
-  root(): bigint {
-    return this.get(DEPTH, 0n);
-  }
-
-  /** Co-path (siblings, leaf → root) and the direction bits for `index`. */
-  proof(index: bigint): { siblings: bigint[]; bits: boolean[] } {
-    const siblings: bigint[] = [];
-    const bits: boolean[] = [];
-    let idx = index;
-    for (let lvl = 0; lvl < DEPTH; lvl++) {
-      siblings.push(this.get(lvl, idx ^ 1n));
-      bits.push(idx % 2n === 1n);
-      idx >>= 1n;
-    }
-    return { siblings, bits };
-  }
-}
-
 export interface Fixture {
   policy: Pick<CorridorPolicy, "credentialRoot" | "revocationRoot" | "minTier">;
   credential: CredentialMaterial;
@@ -84,8 +36,8 @@ export interface Fixture {
 }
 
 /**
- * Build a credential tree containing `holder` (at `index`) plus `others`,
- * with `revoked` commitments in the revocation tree, and return everything
+ * Build a credential tree containing `holder` (at `index`) plus `others`, with
+ * `revoked` commitments in the revocation tree, and return everything
  * `buildWitness` needs for `holder`.
  */
 export function makeFixture(opts: {
@@ -100,18 +52,17 @@ export function makeFixture(opts: {
   const holderCommit = commitmentOf(opts.holder);
   credTree.insert(index, holderCommit);
   (opts.others ?? []).forEach((a, i) =>
-    credTree.insert(BigInt(i + 1) + index + 1n, commitmentOf(a)),
+    credTree.insert(BigInt(i) + index + 1n, commitmentOf(a)),
   );
 
   const revTree = new SparseTree();
   for (const c of opts.revoked ?? []) {
-    revTree.insert(BigInt.asUintN(DEPTH, poseidon2([c])), 1n); // mark slot non-empty
+    revTree.insert(BigInt.asUintN(DEPTH, poseidon2([c])), 1n);
   }
 
   const credProof = credTree.proof(index);
   const revSlot = poseidon2([holderCommit]);
   const revProof = revTree.proof(BigInt.asUintN(DEPTH, revSlot));
-  // sanity: our leBits must equal the tree's derived bits
   const expectBits = leBits(revSlot);
   if (revProof.bits.some((b, i) => b !== expectBits[i])) {
     throw new Error("revocation slot bit derivation mismatch");
@@ -137,7 +88,7 @@ export function makeFixture(opts: {
   };
 }
 
-/** Emit a Noir `Prover.toml` for the circuit from a witness. */
+/** Emit a Noir `Prover.toml` from a witness. */
 export function toProverToml(
   publicInputs: Bytes32[],
   privateInputs: Record<string, unknown>,

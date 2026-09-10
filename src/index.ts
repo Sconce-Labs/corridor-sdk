@@ -22,8 +22,12 @@ import { SorobanReader } from "./soroban.js";
 import { buildWitness } from "./witness.js";
 
 export * from "./types.js";
-export { buildWitness, merkleRoot, leBits, poseidon2 } from "./witness.js";
+export { buildWitness, merkleRoot } from "./witness.js";
+export { poseidon2, CONFORMANCE_VECTOR } from "./poseidon.js";
+export { SparseTree, rootFromProof, leBits, DEPTH } from "./merkle.js";
+export { makeFixture, toProverToml, commitmentOf } from "./fixture.js";
 export { SorobanReader } from "./soroban.js";
+export * from "./hex.js";
 
 export interface Proof {
   bytes: Uint8Array;
