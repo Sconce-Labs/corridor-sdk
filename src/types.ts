@@ -82,11 +82,4 @@ export interface CorridorConfig {
   /** Optional: a local prover endpoint the SDK POSTs the witness to. */
   proverUrl?: string;
 }
-
-/** Stellar testnet defaults — the deployment in corridor-contracts. */
-export const TESTNET: CorridorConfig = {
-  rpcUrl: "https://soroban-testnet.stellar.org",
-  networkPassphrase: "Test SDF Network ; September 2015",
-  registryContractId: "CB6LZV6TJN6YZ2O7FVLNRCJMRVBXCDG6JFFREHGY2BD5K4EYWJ6WKT2K",
-  attestationContractId: "CCAGXABIZWHNLA754LSQCFPA35VLJZEH24MD5OGJNIEMFQHZ7LWQD5AR",
-};
+// Network presets live in `networks.ts`.
