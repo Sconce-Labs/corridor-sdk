@@ -1,7 +1,7 @@
 {
   "name": "@corridor/verify",
-  "version": "0.0.0",
-  "description": "Client SDK for Corridor — build an eligibility witness, request a proof, and present it to a Stellar corridor.",
+  "version": "0.1.0",
+  "description": "Client SDK for Corridor — read a corridor policy, build an eligibility witness, and check payout clearance on Stellar.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,7 +14,8 @@
   "files": ["dist"],
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "test": "node --import tsx --test src/*.test.ts",
+    "test:live": "CORRIDOR_LIVE_TESTS=1 node --import tsx --test src/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "keywords": ["stellar", "soroban", "midnight", "zero-knowledge", "kyc", "privacy"],
@@ -23,10 +24,12 @@
     "type": "git",
     "url": "https://github.com/Sconce-Labs/corridor-sdk"
   },
-  "peerDependencies": {
-    "@stellar/stellar-sdk": ">=12"
+  "dependencies": {
+    "@stellar/stellar-sdk": "^13.0.0",
+    "@zkpassport/poseidon2": "^0.6.2"
   },
   "devDependencies": {
+    "@types/node": "^22.9.0",
     "tsx": "^4.23.1",
     "typescript": "^5.6.0"
   }

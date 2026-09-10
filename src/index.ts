@@ -1,142 +1,107 @@
 /**
  * @corridor/verify — client SDK for Corridor.
  *
- * The integration surface for the three roles. Most of this is signatures +
- * TODOs (M6); the types and the public-input layout are real and match
- * `stellar/crates/corridor_types` (`PI_*`) and `circuits/corridor_eligibility`.
+ *   import { Corridor, TESTNET } from "@corridor/verify";
+ *   const c = new Corridor(TESTNET);
+ *   const policy = await c.getPolicy(corridorId);          // live
+ *   const ok = await c.isCleared(corridorId, nullifier);   // live — the payout gate
+ *   const w = c.buildWitness(cred, policy, disclosure, { corridorId, now });  // local
+ *   const proof = await c.requestProof(w);                 // needs proverUrl (M3)
+ *   await c.enter(corridorId, proof);                      // needs relayerUrl (M6)
  */
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Public-input ABI — keep in lockstep with corridor_types::PI_* and main.nr
-// ─────────────────────────────────────────────────────────────────────────────
+import type {
+  Bytes32,
+  CorridorConfig,
+  CorridorPolicy,
+  CredentialMaterial,
+  DisclosureRequest,
+  EligibilityWitness,
+} from "./types.js";
+import { SorobanReader } from "./soroban.js";
+import { buildWitness } from "./witness.js";
 
-export const PI_INDEX = {
-  credentialRoot: 0,
-  revocationRoot: 1,
-  corridorId: 2,
-  minTier: 3,
-  now: 4,
-  nullifier: 5,
-  disclosedTag: 6,
-  issuerId: 7,
-  auditorBlob: 8,
-} as const;
-
-export const PI_LEN = 9;
-
-/** A 32-byte value as a lowercase hex string, `0x`-prefixed. */
-export type Bytes32 = `0x${string}`;
-
-export interface CorridorPolicy {
-  operator: string;
-  acceptedIssuers: Bytes32[];
-  minTier: number;
-  requiredDisclosures: number;
-  credentialRoot: Bytes32;
-  revocationRoot: Bytes32;
-  rootEpoch: bigint;
-  verifier: string;
-  vkHash: Bytes32;
-  nowToleranceSecs: number;
-  paused: boolean;
-}
-
-/** Everything the holder's wallet/device holds for one credential. */
-export interface CredentialMaterial {
-  holderSecret: Bytes32;
-  tier: number;
-  expiry: number;
-  issuerId: Bytes32;
-  salt: Bytes32;
-  /** Inclusion path under the issuer-set root. */
-  credSiblings: Bytes32[];
-  credIndexBits: (0 | 1)[];
-  /** Non-membership co-path under the revocation root. */
-  revSiblings: Bytes32[];
-}
-
-export interface DisclosureRequest {
-  corridorId: Bytes32;
-  /** Bounded enum index (< 16), not free text. */
-  disclosedTag: number;
-  auditorPubkey: Bytes32;
-}
-
-export interface EligibilityWitness {
-  public: Bytes32[]; // length PI_LEN, ordered by PI_INDEX
-  private: Record<string, unknown>;
-}
+export * from "./types.js";
+export { buildWitness, merkleRoot, leBits, poseidon2 } from "./witness.js";
+export { SorobanReader } from "./soroban.js";
 
 export interface Proof {
   bytes: Uint8Array;
   publicInputs: Bytes32[];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Config
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface CorridorConfig {
-  /** Soroban RPC URL. */
-  rpcUrl: string;
-  networkPassphrase: string;
-  registryContractId: string;
-  attestationContractId: string;
-  /** Endpoint of the fee-sponsoring relayer that submits `enter` for holders. */
-  relayerUrl?: string;
-  /** Local prover endpoint / worker. */
-  proverUrl?: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// API
-// ─────────────────────────────────────────────────────────────────────────────
-
 export class Corridor {
-  constructor(private readonly cfg: CorridorConfig) {}
+  private readonly reader: SorobanReader;
 
-  /** Read a corridor's on-chain policy. */
-  async getPolicy(_corridorId: Bytes32): Promise<CorridorPolicy> {
-    // TODO(M6): Soroban `corridor_registry.get_policy` via stellar-sdk.
-    throw new Error("not implemented — M6");
+  constructor(private readonly cfg: CorridorConfig) {
+    this.reader = new SorobanReader(cfg);
   }
 
-  /** Build the circuit witness from credential material + a disclosure request. */
+  /** Fetch a corridor's on-chain policy. */
+  getPolicy(corridorId: Bytes32): Promise<CorridorPolicy> {
+    return this.reader.getPolicy(corridorId);
+  }
+
+  /** The payout gate: has this nullifier been granted a pass on this corridor? */
+  isCleared(corridorId: Bytes32, nullifier: Bytes32): Promise<boolean> {
+    return this.reader.isCleared(corridorId, nullifier);
+  }
+
+  /** Aggregate pass count for a corridor. */
+  passes(corridorId: Bytes32): Promise<bigint> {
+    return this.reader.passes(corridorId);
+  }
+
+  /** Assemble the circuit witness locally. No network, no secrets leave. */
   buildWitness(
-    _cred: CredentialMaterial,
-    _policy: CorridorPolicy,
-    _req: DisclosureRequest,
-    _now: number,
+    cred: CredentialMaterial,
+    policy: CorridorPolicy,
+    req: DisclosureRequest,
+    opts: { corridorId: Bytes32; now: number },
   ): EligibilityWitness {
-    // TODO(M2/M6): compute commitment, nullifier = Poseidon2(secret, corridorId),
-    // auditor_blob, assemble the ordered public vector. Poseidon2 params MUST
-    // match the on-chain host function (ROADMAP M2 conformance test).
-    throw new Error("not implemented — M2/M6");
+    return buildWitness(cred, policy, req, opts);
   }
 
-  /** Ask the prover for an UltraHonk proof over the witness. */
-  async requestProof(_witness: EligibilityWitness): Promise<Proof> {
-    // TODO(M6): delegate to a local prover / wallet; never send `private` to a server.
-    throw new Error("not implemented — M6");
+  /** POST the witness to a prover. Never sends `privateInputs` to a server you
+   *  don't control — point `proverUrl` at a local process. */
+  async requestProof(witness: EligibilityWitness): Promise<Proof> {
+    if (!this.cfg.proverUrl) {
+      throw new Error("no proverUrl configured — run a local Noir prover (M3)");
+    }
+    const res = await fetch(`${this.cfg.proverUrl}/prove`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(witness),
+    });
+    if (!res.ok) throw new Error(`prover ${res.status}: ${await res.text()}`);
+    const { proof } = (await res.json()) as { proof: string };
+    return {
+      bytes: Uint8Array.from(Buffer.from(proof.replace(/^0x/, ""), "hex")),
+      publicInputs: witness.publicInputs,
+    };
   }
 
-  /**
-   * Submit the proof to `corridor_attestation.enter` via the relayer so the
-   * holder's own Stellar account is not linked to the pass.
-   */
-  async enter(_corridorId: Bytes32, _proof: Proof): Promise<{ txHash: string }> {
-    // TODO(M6): POST to relayerUrl, or fall back to a direct fee-bump tx.
-    throw new Error("not implemented — M6");
-  }
-
-  /** Has this nullifier been granted a pass on this corridor? (payout gate) */
-  async isCleared(_corridorId: Bytes32, _nullifier: Bytes32): Promise<boolean> {
-    // TODO(M6): Soroban `corridor_attestation.is_cleared`.
-    throw new Error("not implemented — M6");
+  /** Submit `enter` via the fee-sponsoring relayer so the holder's account
+   *  stays unlinked from the pass. */
+  async enter(corridorId: Bytes32, proof: Proof): Promise<{ txHash: string }> {
+    if (!this.cfg.relayerUrl) {
+      throw new Error("no relayerUrl configured (M6)");
+    }
+    const res = await fetch(`${this.cfg.relayerUrl}/enter`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        corridorId,
+        proof: `0x${Buffer.from(proof.bytes).toString("hex")}`,
+        publicInputs: proof.publicInputs,
+      }),
+    });
+    if (!res.ok) throw new Error(`relayer ${res.status}: ${await res.text()}`);
+    return (await res.json()) as { txHash: string };
   }
 }
 
-/** One-call helper for corridor operators: the payout gate. */
+/** One-call helper for corridor operators. */
 export async function isCleared(
   cfg: CorridorConfig,
   corridorId: Bytes32,
