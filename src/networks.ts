@@ -32,14 +32,21 @@ export function fromEnv(env: NodeJS.ProcessEnv = process.env): CorridorConfig {
   };
 }
 
-/** Disclosure tag — a bounded enum index (`< 16`), not free text. */
+/**
+ * Disclosure tag — a bounded **category label** for the corridor (`< 16`),
+ * chosen by the app and published in the `PassRecord`.
+ *
+ * The circuit only range-checks it; it carries **no attestation** and is not
+ * bound to the credential or the tier. Do not treat `PassRecord.tag` as a
+ * verified attribute. (Audit R2-H1: `Tier*Pass` values were removed — nothing
+ * bound them to the real tier.)
+ */
 export const DisclosureTag = {
   Generic: 0,
-  Tier1Pass: 1,
-  Tier2Pass: 2,
-  Tier3Pass: 3,
-  AidDisbursement: 4,
-  Remittance: 5,
-  LendingPool: 6,
+  Remittance: 1,
+  AidDisbursement: 2,
+  LendingPool: 3,
+  MerchantSettlement: 4,
+  Payroll: 5,
 } as const;
 export type DisclosureTag = (typeof DisclosureTag)[keyof typeof DisclosureTag];

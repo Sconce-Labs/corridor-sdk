@@ -45,12 +45,12 @@ already have it).
 | `getPolicy(corridorId)` | Soroban read | ✅ the on-chain `CorridorPolicy` |
 | `isCleared(corridorId, nullifier)` | Soroban read | ✅ the payout gate |
 | `passes(corridorId)` · `passRecord(corridorId, nullifier)` | Soroban read | ✅ aggregate count · full `PassRecord` |
-| `buildWitness(cred, policy, req, opts)` | local | ✅ assembles the 9-field public vector + private witness, **and verifies the issuer signature + every predicate first** |
+| `buildWitness(cred, policy, req, opts)` | local | ✅ assembles the 9-field public vector + private witness, **verifies the issuer signature, every predicate, and the secret's entropy first** |
 | `verifyWitnessLocally(witness)` | local | ✅ re-runs every circuit constraint in TS |
-| `issueCredential(issuerSk, attrs)` · `makeFixture()` | local | ✅ sign a credential statement (Grumpkin Schnorr) |
+| `prepareCredentialRequest` · `issueCredential` · `assembleCredential` · `makeFixture` | local | ✅ the three issuance steps — the issuer sees only `holderBinding` |
 | `sign` · `verify` · `publicKey` · `randomIssuerKey` · `GRUMPKIN_P` · `SCHNORR_CHALLENGE_DST` | local | ✅ the Grumpkin Schnorr primitives, pinned to `noir-lang/schnorr` v0.4.0 |
-| `poseidon2` · `holderBinding` · `statementMessage` · `issuerIdOf` | local | ✅ the hash helpers the circuit uses |
-| `randomSecret` · `assertStrongSecret` | local | ✅ CSPRNG `holder_secret` + a weak-value guard |
+| `poseidon2` · `CONFORMANCE_VECTORS` · `holderBinding` · `statementMessage` · `issuerIdOf` | local | ✅ the hash helpers the circuit uses |
+| `randomSecret` / `randomFieldElement` · `assertStrongSecret` | local | ✅ CSPRNG `holder_secret` + a weak-value guard (`buildWitness` enforces it) |
 | `requestProof(witness)` | HTTP | ⏳ needs a local Noir prover (`proverUrl`) — M3/M6 |
 | `enter(corridorId, proof)` | HTTP | ⏳ needs a fee-sponsoring tx-relayer (`relayerUrl`) — M6 |
 
@@ -73,23 +73,38 @@ if (!(await isCleared(TESTNET, corridorId, nullifier))) {
 The holder's app hands you the `nullifier` alongside the payment request. See
 [`examples/payout-gate.ts`](./examples/payout-gate.ts).
 
-### Issuer — sign a credential
+### Issuance — three parties, and the issuer never sees the holder's secret
 
 ```ts
-import { issueCredential, randomIssuerKey } from "@corridor/verify";
+// ── holder ──────────────────────────────────────────────────────────────────
+import { prepareCredentialRequest, randomSecret, randomFieldElement } from "@corridor/verify";
 
-const issuerSk = randomIssuerKey();          // 32-byte Grumpkin scalar — protect it, rotate on compromise
-                                             // register issuerIdOf(publicKey(issuerSk)) on-chain
-
-const credential = issueCredential(issuerSk, {
-  holderSecret,                              // CSPRNG, supplied by the holder; the issuer only hashes it
+const holderSecret = randomSecret();          // CSPRNG — NEVER leaves the device
+const salt = randomFieldElement();
+const request = prepareCredentialRequest(holderSecret, salt, {
   tier: 3,
-  expiry: nowSecs + 14 * 86_400,             // SHORT — days, not years
-  credEpoch: 5,                              // your current epoch; bump it to bulk-revoke
-  salt,
+  expiry: nowSecs + 14 * 86_400,              // SHORT — days, not years
+  credEpoch: 5,
 });
-// → { tier, expiry, credEpoch, salt, issuer: { pubkeyX, pubkeyY, sLo, sHi, eLo, eHi } }
+// request = { holderBinding, tier, expiry, credEpoch }  — send this to the issuer
+
+// ── issuer ──────────────────────────────────────────────────────────────────
+import { issueCredential, randomIssuerKey, publicKey, issuerIdOf } from "@corridor/verify";
+
+const issuerSk = randomIssuerKey();           // Grumpkin scalar — protect it, rotate on compromise
+const pk = publicKey(issuerSk);               // register issuerIdOf(pk.x, pk.y) on-chain
+const statement = issueCredential(issuerSk, request);   // signs — sees only `holderBinding`
+// statement = { tier, expiry, credEpoch, issuer: { pubkeyX, pubkeyY, sLo, sHi, eLo, eHi } }
+
+// ── holder again ────────────────────────────────────────────────────────────
+import { assembleCredential } from "@corridor/verify";
+
+const credential = assembleCredential(holderSecret, salt, statement); // → CredentialMaterial
 ```
+
+The issuer receives `Poseidon2(holderSecret, salt)`, never `holderSecret`. An
+issuer who learned the raw secret could derive every one of that holder's
+per-corridor nullifiers and link all their activity.
 
 ### Holder — prove eligibility
 
@@ -103,7 +118,7 @@ const witness = c.buildWitness(
   credential,
   policy,
   {
-    disclosedTag: 1,                         // bounded enum index, < 16
+    disclosedTag: 1,                         // a corridor category label (< 16) — NOT an attested attribute
     auditorPubkey: policy.auditorPubkey,     // must equal the policy's
     auditorNonce: randomFieldElement(),
   },
@@ -157,7 +172,7 @@ placeholder; Corridor is not on mainnet yet.
 | `verify-local.ts` | `verifyWitnessLocally` — a faithful TS mirror of `eligibility::check` |
 | `schnorr.ts` | Grumpkin Schnorr signer/verifier, pinned to `noir-lang/schnorr` v0.4.0; deterministic (EdDSA-style) nonces |
 | `poseidon.ts` | Poseidon2 (`@zkpassport/poseidon2`) + the pinned conformance vector |
-| `fixture.ts` | `issueCredential` / `makeFixture` — test + `gen-fixture` credentials |
+| `fixture.ts` | `prepareCredentialRequest` / `issueCredential` / `assembleCredential` / `makeFixture` |
 | `types.ts` | `PI_INDEX` / `PI_LEN`, `CorridorPolicy`, `IssuerSignature`, `CredentialMaterial`, `EligibilityWitness` |
 | `hex.ts` | `Bytes32` helpers, `randomFieldElement` / `randomSecret`, `assertStrongSecret` |
 | `networks.ts` | `TESTNET` / `MAINNET` / `fromEnv` / `DisclosureTag` |
@@ -171,7 +186,7 @@ placeholder; Corridor is not on mainnet yet.
 npm install
 npm run format:check      # prettier
 npm run typecheck         # tsc --noEmit, strict
-npm test                  # node:test — 23 tests, offline
+npm test                  # node:test — 25 tests, offline
 npm run build             # tsc → dist/
 npm run gen-fixture       # sign a witness and print it (smoke test)
 npm run gen-fixture -- --write   # also overwrite the circuit's fixture (needs corridor-circuits as a sibling)
@@ -187,7 +202,7 @@ npm run docs              # typedoc → docs/api
 
 | Job | Steps | Blocking |
 |-----|-------|----------|
-| **`typecheck + test + format + build`** | `npm ci` · `npm run format:check` · `npm run typecheck` · `npm test` (23) · `npm run build` · `npm run gen-fixture` (signs a real witness as a smoke test) | ✅ required for merge |
+| **`typecheck + test + format + build`** | `npm ci` · `npm run format:check` · `npm run typecheck` · `npm test` (25) · `npm run build` · `npm run gen-fixture` (signs a real witness as a smoke test) | ✅ required for merge |
 | **`live testnet reads (non-blocking)`** | `npm run test:live` against Stellar testnet | ⚠️ `continue-on-error` — informational |
 
 `main` is protected on the `typecheck + test + format + build` check.

@@ -10,12 +10,19 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildWitness } from "./witness.js";
-import { makeFixture } from "./fixture.js";
+import { buildWitness, holderBinding } from "./witness.js";
+import {
+  makeFixture,
+  prepareCredentialRequest,
+  issueCredential,
+  assembleCredential,
+} from "./fixture.js";
+import { randomIssuerKey, publicKey } from "./schnorr.js";
 import { verifyWitnessLocally } from "./verify-local.js";
+import { issuerIdOf } from "./witness.js";
 import { PI_INDEX, PI_LEN } from "./types.js";
 import type { CorridorPolicy } from "./types.js";
-import { toBytes32, bytes32ToBigInt } from "./hex.js";
+import { toBytes32, bytes32ToBigInt, randomFieldElement } from "./hex.js";
 
 const CID =
   "0x0000000000000000000000000000000000000000000000000000000000000004" as const;
@@ -59,6 +66,45 @@ test("SDK witness satisfies the circuit and matches the contract ABI layout", ()
   assert.equal(bytes32ToBigInt(w.publicInputs[PI_INDEX.minCredEpoch]!), 1n);
   assert.equal(w.publicInputs[PI_INDEX.auditorPubkey], AUDITOR);
   assert.equal(w.publicInputs[PI_INDEX.auditorBlob], w.auditorBlob);
+});
+
+test("the three-party issuance flow: holder blinds → issuer signs → holder assembles → proof", () => {
+  // holder side — the secret never leaves here
+  const holderSecret = randomFieldElement();
+  const salt = randomFieldElement();
+  const request = prepareCredentialRequest(holderSecret, salt, {
+    tier: 3,
+    expiry: 9_000_000,
+    credEpoch: 4,
+  });
+  assert.equal(request.holderBinding, holderBinding(holderSecret, salt));
+
+  // issuer side — sees only the binding
+  const issuerSk = randomIssuerKey();
+  const statement = issueCredential(issuerSk, request);
+  assert.deepEqual(Object.keys(statement).sort(), [
+    "credEpoch",
+    "expiry",
+    "issuer",
+    "tier",
+  ]);
+
+  // holder side — reassemble and prove
+  const credential = assembleCredential(holderSecret, salt, statement);
+  const pk = publicKey(issuerSk);
+  const w = buildWitness(
+    credential,
+    policy({ issuerId: issuerIdOf(pk.x, pk.y) } as ReturnType<typeof makeFixture>),
+    { disclosedTag: 1, auditorPubkey: toBytes32(0n), auditorNonce: toBytes32(3n) },
+    { corridorId: CID, now: 1_000_000 },
+  );
+  assert.deepEqual(verifyWitnessLocally(w), { ok: true, failures: [] });
+
+  // a statement assembled against the wrong holder secret is rejected
+  assert.throws(
+    () => assembleCredential(randomFieldElement(), salt, statement),
+    /does not verify/,
+  );
 });
 
 test("a proof from an issuer not on the allowlist would fail the contract's check", () => {

@@ -27,6 +27,7 @@ export { TESTNET, MAINNET, fromEnv, DisclosureTag } from "./networks.js";
 export {
   buildWitness,
   statementMessage,
+  credentialStatement,
   holderBinding,
   issuerIdOf,
 } from "./witness.js";
@@ -40,7 +41,12 @@ export {
   sign,
   verify as verifySchnorrSignature,
 } from "./schnorr.js";
-export { makeFixture, issueCredential } from "./fixture.js";
+export {
+  makeFixture,
+  issueCredential,
+  prepareCredentialRequest,
+  assembleCredential,
+} from "./fixture.js";
 export { SorobanReader } from "./soroban.js";
 export type { PassRecord } from "./soroban.js";
 export { verifyWitnessLocally } from "./verify-local.js";

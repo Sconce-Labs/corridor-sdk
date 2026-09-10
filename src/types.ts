@@ -52,6 +52,29 @@ export interface IssuerSignature {
   eHi: Bytes32;
 }
 
+/**
+ * What a holder sends an issuer to be signed. Carries only the **blinded**
+ * binding `Poseidon2(holderSecret, salt)` — never the raw secret, which would
+ * let the issuer derive every one of the holder's per-corridor nullifiers.
+ */
+export interface CredentialRequest {
+  holderBinding: Bytes32;
+  tier: number;
+  expiry: number;
+  credEpoch: number;
+}
+
+/**
+ * What an issuer returns: the attested attributes + the Schnorr signature over
+ * `{ holderBinding, tier, expiry, credEpoch }`. Holds no holder data.
+ */
+export interface SignedStatement {
+  tier: number;
+  expiry: number;
+  credEpoch: number;
+  issuer: IssuerSignature;
+}
+
 /** Everything the holder's wallet holds for one credential. */
 export interface CredentialMaterial {
   holderSecret: Bytes32;

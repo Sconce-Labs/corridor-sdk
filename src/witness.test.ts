@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildWitness, issuerIdOf } from "./witness.js";
+import { buildWitness, issuerIdOf, holderBinding } from "./witness.js";
 import { makeFixture, issueCredential } from "./fixture.js";
+import { randomIssuerKey } from "./schnorr.js";
 import { verifyWitnessLocally } from "./verify-local.js";
 import { publicKey } from "./schnorr.js";
 import { poseidon2 } from "./poseidon.js";
@@ -103,15 +104,30 @@ test("issuer id is Poseidon2 of both pubkey coordinates", () => {
   assert.notEqual(fx.issuerId, issuerIdOf(pk.y, pk.x));
 });
 
-test("two issuers produce different signatures for the same holder", () => {
-  const holder = {
-    holderSecret: 5n,
+test("two issuers produce different signatures for the same request", () => {
+  const request = {
+    holderBinding: holderBinding(toBytes32(5n), toBytes32(1n)),
     tier: 4,
     expiry: 9_000_000,
     credEpoch: 7,
-    salt: 1n,
   };
-  const a = issueCredential(makeFixture().issuerPrivateKey, holder);
-  const b = issueCredential(makeFixture().issuerPrivateKey, holder);
+  const a = issueCredential(randomIssuerKey(), request);
+  const b = issueCredential(randomIssuerKey(), request);
   assert.notEqual(a.issuer.pubkeyX, b.issuer.pubkeyX);
+  assert.notEqual(a.issuer.sLo, b.issuer.sLo);
+});
+
+test("the issuer never receives holder_secret — issueCredential takes only the binding", () => {
+  const secret = toBytes32(0x0affee0decaf0badf00d1234567890abcdef0affee0decaf0badf00dn);
+  const salt = toBytes32(9n);
+  const binding = holderBinding(secret, salt);
+  const stmt = issueCredential(randomIssuerKey(), {
+    holderBinding: binding,
+    tier: 3,
+    expiry: 9_000_000,
+    credEpoch: 4,
+  });
+  // the returned statement carries no holder field at all
+  assert.equal("holderSecret" in stmt, false);
+  assert.equal("holderBinding" in stmt, false);
 });

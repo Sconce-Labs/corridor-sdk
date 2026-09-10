@@ -11,26 +11,49 @@ import type {
   EligibilityWitness,
 } from "./types.js";
 import { PI_LEN } from "./types.js";
-import { bytes32ToBigInt, numberToWord, toBytes32 } from "./hex.js";
+import { assertStrongSecret, bytes32ToBigInt, numberToWord, toBytes32 } from "./hex.js";
 import { poseidon2 } from "./poseidon.js";
 import { verify as verifySchnorr } from "./schnorr.js";
 
 const MAX_TAG = 16;
 
-/** `Poseidon2(holder_secret, salt)` — the holder-hiding value the issuer signs. */
-export function holderBinding(holderSecret: Bytes32, salt: Bytes32): bigint {
-  return poseidon2([bytes32ToBigInt(holderSecret), bytes32ToBigInt(salt)]);
+/**
+ * `Poseidon2(holder_secret, salt)` — the holder-hiding value the issuer signs
+ * over. **The holder computes this and sends only the result to the issuer;**
+ * the raw `holder_secret` never leaves the holder's device (an issuer who
+ * learned it could derive every one of the holder's per-corridor nullifiers).
+ */
+export function holderBinding(holderSecret: Bytes32, salt: Bytes32): Bytes32 {
+  return toBytes32(poseidon2([bytes32ToBigInt(holderSecret), bytes32ToBigInt(salt)]));
 }
 
-/** The exact message an issuer signs for a credential. */
-export function statementMessage(cred: CredentialMaterial): Bytes32 {
+/**
+ * The exact message an issuer's Schnorr signature covers:
+ * `Poseidon2([holder_binding, tier, expiry, cred_epoch])`.
+ */
+export function statementMessage(
+  holderBinding: Bytes32,
+  tier: number,
+  expiry: number,
+  credEpoch: number,
+): Bytes32 {
   return toBytes32(
     poseidon2([
-      holderBinding(cred.holderSecret, cred.salt),
-      BigInt(cred.tier),
-      BigInt(cred.expiry),
-      BigInt(cred.credEpoch),
+      bytes32ToBigInt(holderBinding),
+      BigInt(tier),
+      BigInt(expiry),
+      BigInt(credEpoch),
     ]),
+  );
+}
+
+/** The signed message for a fully-assembled credential (holder side). */
+export function credentialStatement(cred: CredentialMaterial): Bytes32 {
+  return statementMessage(
+    holderBinding(cred.holderSecret, cred.salt),
+    cred.tier,
+    cred.expiry,
+    cred.credEpoch,
   );
 }
 
@@ -51,12 +74,15 @@ export function buildWitness(
   if (BigInt(cred.credEpoch) < policy.minCredEpoch)
     throw new Error("credential epoch is below the corridor's revocation floor");
 
+  // a low-entropy holder secret makes the nullifier grindable (audit R2-L2/H5)
+  assertStrongSecret(cred.holderSecret);
+
   const secret = bytes32ToBigInt(cred.holderSecret);
   const issuer = cred.issuer;
   const issuerId = issuerIdOf(issuer.pubkeyX, issuer.pubkeyY);
 
   // fail locally on a bad/forged signature before any proof is generated
-  const message = statementMessage(cred);
+  const message = credentialStatement(cred);
   if (
     !verifySchnorr(
       { x: issuer.pubkeyX, y: issuer.pubkeyY },
