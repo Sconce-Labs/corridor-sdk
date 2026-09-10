@@ -1,11 +1,14 @@
 import type { CorridorConfig } from "./types.js";
 
-/** Stellar testnet — the live deployment in corridor-contracts. */
+/**
+ * Stellar testnet — the live Option B deployment in
+ * corridor-contracts/deployments/testnet.json (redeployed 2026-09-10).
+ */
 export const TESTNET: CorridorConfig = {
   rpcUrl: "https://soroban-testnet.stellar.org",
   networkPassphrase: "Test SDF Network ; September 2015",
-  registryContractId: "CB6LZV6TJN6YZ2O7FVLNRCJMRVBXCDG6JFFREHGY2BD5K4EYWJ6WKT2K",
-  attestationContractId: "CCAGXABIZWHNLA754LSQCFPA35VLJZEH24MD5OGJNIEMFQHZ7LWQD5AR",
+  registryContractId: "CAV6DMVCBOU5DGQVFSPU2UIF62LNFW7PWAGC7HCPHVIUO6SWRPSX3B65",
+  attestationContractId: "CD76SRVQS6QSDFL2DYWGPK2JGWQPZO4NBFOGRDR5UWLGCABLBONNUXK5",
 };
 
 /** Placeholder — Corridor is not on Stellar mainnet yet. */
