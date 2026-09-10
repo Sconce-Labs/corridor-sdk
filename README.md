@@ -20,11 +20,12 @@ proof, and check whether a payout is cleared — all from TypeScript.
 | `getPolicy(corridorId)` | ✅ live — the on-chain `CorridorPolicy` |
 | `isCleared(corridorId, nullifier)` | ✅ live — the payout gate |
 | `passes(corridorId)` / `passRecord(corridorId, nullifier)` | ✅ live — aggregate count / full record |
-| `buildWitness(cred, policy, disclosure, {corridorId, now})` | ✅ local — the 9-field public vector + private witness; Poseidon2 pinned to the circuit |
+| `buildWitness(cred, policy, disclosure, {corridorId, now})` | ✅ local — the 9-field public vector + private witness; verifies the issuer signature and every predicate first |
 | `verifyWitnessLocally(witness)` | ✅ local — re-runs every circuit constraint in TS before proving |
-| `makeFixture` / `toProverToml` | ✅ local — build a test tree, emit a Noir `Prover.toml` |
+| `issueCredential(issuerSk, attrs)` / `makeFixture` | ✅ local — sign a credential statement (Grumpkin Schnorr) |
+| `sign` / `verify` / `publicKey` / `randomIssuerKey` | ✅ local — the Grumpkin Schnorr primitives, pinned to `noir-lang/schnorr` v0.4.0 |
 | `requestProof(witness)` | needs a local Noir prover (`proverUrl`) — M3 |
-| `enter(corridorId, proof)` | needs a fee-sponsoring relayer (`relayerUrl`) — M6 |
+| `enter(corridorId, proof)` | needs a fee-sponsoring tx-relayer (`relayerUrl`) — M6 |
 
 Config: `TESTNET` / `MAINNET` presets, `Corridor.fromEnv()`, or pass your own
 `CorridorConfig`. Runnable examples in [`examples/`](./examples).
@@ -46,9 +47,11 @@ if (!(await isCleared(TESTNET, corridorId, nullifier))) {
 }
 ```
 
-`TESTNET` points at the live deployment
-([`corridor-contracts/deployments/testnet.json`](https://github.com/Sconce-Labs/corridor-contracts/blob/main/deployments/testnet.json)).
-Pass your own `CorridorConfig` for a different network.
+`TESTNET` points at
+[`corridor-contracts/deployments/testnet.json`](https://github.com/Sconce-Labs/corridor-contracts/blob/main/deployments/testnet.json).
+Those addresses ran the pre-Option-B ABI and are pending a redeploy (corridor
+ROADMAP M2) — update the preset in `src/networks.ts` when that lands. Pass your
+own `CorridorConfig` for a different network.
 
 ## Holder flow
 
@@ -60,7 +63,7 @@ const c = new Corridor({ ...TESTNET, proverUrl: "http://localhost:8787" });
 const policy  = await c.getPolicy(corridorId);
 const witness = c.buildWitness(credentialMaterial, policy, {
   disclosedTag: 1,                       // bounded enum index, < 16
-  auditorPubkey: "0x00…00",              // "0x00…00" = no auditor
+  auditorPubkey: "0x00…00",              // must equal policy.auditorPubkey
   auditorNonce: randomBytes32(),
 }, { corridorId, now: Math.floor(Date.now() / 1000) });
 
@@ -72,27 +75,44 @@ const proof = await c.requestProof(witness);   // proving stays on proverUrl
 await c.enter(corridorId, proof);              // via relayerUrl (M6)
 ```
 
-`buildWitness` re-derives the Merkle roots from the supplied paths and throws if
-they don't match the policy — so a stale or revoked credential fails locally
-before any proof is generated.
+`buildWitness` verifies the issuer's Grumpkin Schnorr signature and checks every
+predicate (tier, expiry, the `min_cred_epoch` revocation floor, the auditor key)
+— so an expired, bulk-revoked, or wrong-issuer credential fails locally before
+any proof is generated.
+
+### Issuing (issuer side)
+
+```ts
+import { issueCredential, randomIssuerKey } from "@corridor/verify";
+
+const issuerSk = randomIssuerKey();                 // keep safe; rotate on compromise
+const credential = issueCredential(issuerSk, {
+  holderSecret,   // CSPRNG, from the holder; the issuer only hashes it
+  tier: 3, expiry: nowSecs + 14 * 86400, credEpoch: 5, salt,
+});
+```
 
 ## Develop
 
 ```bash
 npm install
 npm run typecheck
-npm test              # offline — 4 tests
-npm run test:live     # + 3 tests against Stellar testnet
+npm test              # offline — 23 tests
+npm run test:live     # + live reads against Stellar testnet
 npm run build
+npm run gen-fixture   # signs a witness (smoke); add -- --write to update the circuit
 ```
 
-## Poseidon2 conformance
+## Conformance
 
-`buildWitness` uses `@zkpassport/poseidon2`. `poseidon2([1n,2n])` equals
-`0x038682aa1cb5ae4e0a3f13da432a95c77c5c111f6f030faf9cad641ce1ed7383` — the same
-value asserted in `corridor-circuits`. The Soroban leg of that conformance
-(matching `poseidon2_permutation`) is tracked in
-[`corridor-contracts/ABI.md`](https://github.com/Sconce-Labs/corridor-contracts/blob/main/ABI.md).
+- **Poseidon2** — `buildWitness` uses `@zkpassport/poseidon2`;
+  `poseidon2([1n,2n])` equals
+  `0x038682aa1cb5ae4e0a3f13da432a95c77c5c111f6f030faf9cad641ce1ed7383`, the
+  value asserted in `corridor-circuits` and `corridor-contracts`.
+- **Grumpkin Schnorr** — `src/schnorr.ts` is checked against `noir-lang/schnorr`
+  v0.4.0's pinned test vector, and `gen-fixture` produces a witness that
+  `nargo execute` solves in the circuit's CI — so the signer and the circuit's
+  verifier provably agree.
 
 ## Contributing
 

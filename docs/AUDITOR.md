@@ -13,9 +13,10 @@ auditor_blob = Poseidon2(auditor_pubkey, tier, issuer_id, nullifier, auditor_non
 
 `buildWitness` computes this and the circuit asserts it. Today it is a **hiding
 commitment**: it binds the warrant-relevant fields to the nullifier, but the
-auditor cannot yet *decrypt* it. Pass `auditorPubkey: "0x00…00"` when no auditor
-applies (the corridor policy's `requiredDisclosures` says whether one is
-mandatory).
+auditor cannot yet *decrypt* it. `auditor_pubkey` is a **public input the
+Stellar contract binds to `policy.auditor_pubkey`** — the holder cannot
+substitute their own key. Pass `auditorPubkey: "0x00…00"` only when the policy
+itself has no auditor (`buildWitness` throws on a mismatch).
 
 ## Target form (M7 — real encryption)
 

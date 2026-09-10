@@ -22,8 +22,9 @@ npm run typecheck
   `corridor-contracts/ABI.md`. Changing it means matching PRs on
   `corridor-contracts` and `corridor-circuits`.
 - **Poseidon2** must keep matching the pinned vector
-  (`CONFORMANCE_VECTOR` in `src/poseidon.ts`) — don't swap the hash library
-  without re-checking it against the circuit and Soroban.
+  (`CONFORMANCE_VECTOR` in `src/poseidon.ts`); **Grumpkin Schnorr**
+  (`src/schnorr.ts`) must keep matching `noir-lang/schnorr` v0.4.0's vector and
+  the circuit (`npm run gen-fixture` + `nargo execute`).
 - Conventional commits. Apache-2.0.
 
 ## Module map
@@ -31,9 +32,10 @@ npm run typecheck
 | Module | Role |
 |--------|------|
 | `poseidon.ts` | the Poseidon2 hash + conformance vector |
-| `merkle.ts` | `SparseTree`, `rootFromProof`, `leBits` |
-| `hex.ts` | `Bytes32` encoding helpers |
-| `witness.ts` | `buildWitness` — assemble circuit inputs |
-| `fixture.ts` | `makeFixture` / `toProverToml` (tests + `gen-fixture`) |
+| `schnorr.ts` | Grumpkin Schnorr signer/verifier (pinned to `noir-lang/schnorr`) |
+| `hex.ts` | `Bytes32` helpers (`randomSecret`, `assertStrongSecret`) |
+| `witness.ts` | `buildWitness` — assemble + locally verify circuit inputs |
+| `verify-local.ts` | `verifyWitnessLocally` — mirrors `eligibility::check` |
+| `fixture.ts` | `issueCredential` / `makeFixture` (tests + `gen-fixture`) |
 | `soroban.ts` | `SorobanReader` — `getPolicy` / `isCleared` / `passes` |
 | `index.ts` | the `Corridor` class + re-exports |
