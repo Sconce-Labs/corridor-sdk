@@ -1,4 +1,9 @@
+import { randomBytes } from "node:crypto";
 import type { Bytes32 } from "./types.js";
+
+/** BN254 scalar field modulus — values must be reduced below this. */
+export const BN254_FR =
+  21888242871839275222246405745257275088548364400416034343698204186575808495617n;
 
 export function toBytes32(v: bigint | number | Uint8Array | string): Bytes32 {
   let hex: string;
@@ -21,8 +26,24 @@ export function bytes32ToBigInt(b: Bytes32): bigint {
   return BigInt(b.startsWith("0x") ? b : `0x${b}`);
 }
 
-/** Big-endian u64/u32 packed into the low bytes of a 32-byte word (matches
- *  `corridor_types::word_to_u64` / `word_to_u32` on the contract side). */
+/** Big-endian integer in the low bytes of a 32-byte word (matches
+ *  `corridor_types::word_to_u64` / `word_to_u32`). */
 export function numberToWord(n: bigint | number): Bytes32 {
   return toBytes32(BigInt(n));
 }
+
+export function isBytes32(s: string): s is Bytes32 {
+  return /^0x[0-9a-fA-F]{64}$/.test(s);
+}
+
+/** A random field element (< BN254_FR), 32-byte hex. Use for salt / nonce. */
+export function randomFieldElement(): Bytes32 {
+  let v: bigint;
+  do {
+    v = BigInt(`0x${randomBytes(32).toString("hex")}`);
+  } while (v >= BN254_FR);
+  return toBytes32(v);
+}
+
+/** A fresh holder secret. There is no key recovery — store it. */
+export const randomSecret = randomFieldElement;
