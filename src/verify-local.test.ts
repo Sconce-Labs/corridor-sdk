@@ -20,6 +20,7 @@ function policyFor(fx: ReturnType<typeof makeFixture>): CorridorPolicy {
     rootEpoch: 1n,
     verifier: "C".padEnd(56, "A"),
     vkHash: toBytes32(9n),
+    auditorPubkey: toBytes32(0n),
     nowToleranceSecs: 300n,
     paused: false,
   };

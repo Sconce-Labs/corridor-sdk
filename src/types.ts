@@ -17,10 +17,11 @@ export const PI_INDEX = {
   nullifier: 5,
   disclosedTag: 6,
   issuerId: 7,
-  auditorBlob: 8,
+  auditorPubkey: 8,
+  auditorBlob: 9,
 } as const;
 
-export const PI_LEN = 9;
+export const PI_LEN = 10;
 
 export interface CorridorPolicy {
   operator: string;
@@ -32,6 +33,8 @@ export interface CorridorPolicy {
   rootEpoch: bigint;
   verifier: string;
   vkHash: Bytes32;
+  /** Auditor key `auditor_blob` must bind to. `0x00…00` = no auditor. */
+  auditorPubkey: Bytes32;
   nowToleranceSecs: bigint;
   paused: boolean;
 }

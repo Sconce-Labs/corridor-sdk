@@ -36,7 +36,6 @@ export function verifyWitnessLocally(w: EligibilityWitness): LocalCheck {
     rev_low_next_value: string;
     rev_low_siblings: string[];
     rev_low_index_bits: boolean[];
-    auditor_pk: string;
     auditor_nonce: string;
   };
 
@@ -88,9 +87,9 @@ export function verifyWitnessLocally(w: EligibilityWitness): LocalCheck {
   // 7 tag bound
   if (pub[PI_INDEX.disclosedTag]! >= 16n) failures.push("tag out of range");
 
-  // 8 auditor blob binding
+  // 8 auditor blob binding (auditor_pubkey is a public input)
   const expectedBlob = poseidon2([
-    bytes32ToBigInt(p.auditor_pk as `0x${string}`),
+    pub[PI_INDEX.auditorPubkey]!,
     BigInt(p.tier),
     issuerId,
     pub[PI_INDEX.nullifier]!,

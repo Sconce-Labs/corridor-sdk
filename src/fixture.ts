@@ -109,6 +109,7 @@ export function toProverToml(
     "nullifier",
     "disclosed_tag",
     "issuer_id",
+    "auditor_pubkey",
     "auditor_blob",
   ];
   const lines = names.map((n, i) => {

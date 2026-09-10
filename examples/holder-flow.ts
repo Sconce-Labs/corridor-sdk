@@ -35,6 +35,7 @@ const policy: CorridorPolicy = {
   rootEpoch: 1n,
   verifier: "C".padEnd(56, "A"),
   vkHash: "0x0000000000000000000000000000000000000000000000000000000000000009",
+  auditorPubkey: "0x0000000000000000000000000000000000000000000000000000000000000000",
   nowToleranceSecs: 300n,
   paused: false,
 };

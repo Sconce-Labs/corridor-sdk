@@ -20,7 +20,7 @@ test("leBits is little-endian", () => {
   assert.deepEqual(leBits(0b1011n, 4), [true, true, false, true]);
 });
 
-test("buildWitness assembles a 9-field public vector and derived values", () => {
+test("buildWitness assembles a 10-field public vector and derived values", () => {
   const holder = {
     holderSecret: 1n,
     tier: 2,
@@ -39,6 +39,7 @@ test("buildWitness assembles a 9-field public vector and derived values", () => 
     rootEpoch: 1n,
     verifier: "C".padEnd(56, "A"),
     vkHash: toBytes32(9n),
+    auditorPubkey: toBytes32(0n),
     nowToleranceSecs: 300n,
     paused: false,
   };
@@ -50,7 +51,7 @@ test("buildWitness assembles a 9-field public vector and derived values", () => 
     { corridorId: CID, now: 1_000_000 },
   );
 
-  assert.equal(w.publicInputs.length, 9);
+  assert.equal(w.publicInputs.length, 10);
   assert.equal(w.publicInputs[2], CID);
   assert.equal(w.nullifier, toBytes32(poseidon2([1n, BigInt(CID)])));
   assert.equal(w.commitment, fx.commitment);
@@ -112,6 +113,7 @@ test("makeFixture produces a witness buildWitness accepts", () => {
     rootEpoch: 1n,
     verifier: "C".padEnd(56, "A"),
     vkHash: toBytes32(9n),
+    auditorPubkey: toBytes32(0n),
     nowToleranceSecs: 300n,
     paused: false,
   };
@@ -122,7 +124,7 @@ test("makeFixture produces a witness buildWitness accepts", () => {
     { disclosedTag: 2, auditorPubkey: toBytes32(0n), auditorNonce: toBytes32(7n) },
     { corridorId: CID, now: 1_000_000 },
   );
-  assert.equal(w.publicInputs.length, 9);
+  assert.equal(w.publicInputs.length, 10);
   assert.equal(w.commitment, fx.commitment);
 
   const toml = toProverToml(w.publicInputs, w.privateInputs);

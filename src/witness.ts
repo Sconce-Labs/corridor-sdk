@@ -55,6 +55,8 @@ export function buildWitness(
     salt,
   ]);
   const nullifier = poseidon2([secret, corridorId]);
+  // auditorPk is the corridor's auditor key (public), bound by the proof and
+  // checked equal to policy.auditorPubkey on-chain.
   const auditorBlob = poseidon2([
     auditorPk,
     BigInt(cred.tier),
@@ -108,6 +110,7 @@ export function buildWitness(
     toBytes32(nullifier),
     numberToWord(req.disclosedTag),
     cred.issuerId,
+    req.auditorPubkey,
     toBytes32(auditorBlob),
   ];
   if (publicInputs.length !== PI_LEN) throw new Error("public input length mismatch");
@@ -126,7 +129,6 @@ export function buildWitness(
       rev_low_next_value: cred.revLowNextValue,
       rev_low_siblings: cred.revLowSiblings,
       rev_low_index_bits: cred.revLowIndexBits,
-      auditor_pk: req.auditorPubkey,
       auditor_nonce: req.auditorNonce,
     },
     commitment: toBytes32(commitment),

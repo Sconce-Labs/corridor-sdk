@@ -69,6 +69,8 @@ export class SorobanReader {
       rootEpoch: BigInt(p.root_epoch as bigint),
       verifier: String(p.verifier),
       vkHash: `0x${Buffer.from(p.vk_hash as Buffer).toString("hex")}` as Bytes32,
+      auditorPubkey:
+        `0x${Buffer.from(p.auditor_pubkey as Buffer).toString("hex")}` as Bytes32,
       nowToleranceSecs: BigInt(p.now_tolerance_secs as bigint),
       paused: Boolean(p.paused),
     };
