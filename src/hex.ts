@@ -45,5 +45,22 @@ export function randomFieldElement(): Bytes32 {
   return toBytes32(v);
 }
 
-/** A fresh holder secret. There is no key recovery — store it. */
+/**
+ * A fresh holder secret. **Load-bearing for privacy** — it blinds the credential
+ * commitment and the nullifier is `Poseidon2(secret, corridorId)`, so a
+ * low-entropy secret is grindable (link a holder across corridors, or brute a
+ * target nullifier). Always generate it here, never from a user passphrase or a
+ * weak seed. There is no recovery — store it securely.
+ */
 export const randomSecret = randomFieldElement;
+
+/** Throw if a purported holder secret is obviously low-entropy (audit H5). A
+ *  soft guard for issuer/wallet code — not a substitute for using randomSecret. */
+export function assertStrongSecret(s: Bytes32): void {
+  const v = bytes32ToBigInt(s);
+  if (v < 1n << 200n) {
+    throw new Error(
+      "holder secret has < 200 bits — use randomSecret(); low-entropy secrets are grindable",
+    );
+  }
+}

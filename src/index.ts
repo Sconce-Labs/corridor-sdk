@@ -40,7 +40,7 @@ export { SorobanReader } from "./soroban.js";
 export type { PassRecord } from "./soroban.js";
 export { verifyWitnessLocally } from "./verify-local.js";
 export type { LocalCheck } from "./verify-local.js";
-export * from "./hex.js";
+export * from "./hex.js"; // incl. randomSecret, assertStrongSecret (audit H5)
 
 export interface Proof {
   bytes: Uint8Array;
