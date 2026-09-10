@@ -8,14 +8,30 @@ on:
 
 jobs:
   build:
-    name: typecheck + test
+    name: typecheck + test + format + build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      - run: npm install
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npx tsx scripts/gen-fixture.ts > /dev/null
+
+  live:
+    name: live testnet reads (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run test:live
