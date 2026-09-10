@@ -1,0 +1,14 @@
+src
+tsconfig.json
+*.test.ts
+.github
+.editorconfig
+.nvmrc
+.prettier*
+CONTRIBUTING.md
+SECURITY.md
+CHANGELOG.md
+docs
+examples
+Makefile
+NOTICE
