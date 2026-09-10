@@ -7,8 +7,8 @@ import type { CorridorConfig } from "./types.js";
 export const TESTNET: CorridorConfig = {
   rpcUrl: "https://soroban-testnet.stellar.org",
   networkPassphrase: "Test SDF Network ; September 2015",
-  registryContractId: "CAV6DMVCBOU5DGQVFSPU2UIF62LNFW7PWAGC7HCPHVIUO6SWRPSX3B65",
-  attestationContractId: "CD76SRVQS6QSDFL2DYWGPK2JGWQPZO4NBFOGRDR5UWLGCABLBONNUXK5",
+  registryContractId: "CDGMQ24E6OIBZB3EKJN5TUA5POYE6D5FNBL2II6SRLTYF32TE4HIEXJ6",
+  attestationContractId: "CCHWKVRCEKPJHEXREP5SCZ4TEKNBFYEFYA2VR3SET5AMG4WOC76LDL4K",
 };
 
 /** Placeholder — Corridor is not on Stellar mainnet yet. */
