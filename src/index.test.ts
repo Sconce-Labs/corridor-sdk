@@ -6,7 +6,8 @@ import { makeFixture, toProverToml } from "./fixture.js";
 import type { CorridorPolicy, CredentialMaterial } from "./types.js";
 import { toBytes32 } from "./hex.js";
 
-const CID = "0x0000000000000000000000000000000000000000000000000000000000000004" as const;
+const CID =
+  "0x0000000000000000000000000000000000000000000000000000000000000004" as const;
 
 test("poseidon2 matches the pinned cross-impl vector (== the Noir circuit)", () => {
   assert.equal(
@@ -21,7 +22,11 @@ test("leBits is little-endian", () => {
 
 test("buildWitness assembles a 9-field public vector and derived values", () => {
   // build a depth-32 tree with one real leaf so the paths actually verify
-  const secret = 1n, tier = 2, expiry = 2_000_000, issuer = 7n, salt = 5n;
+  const secret = 1n,
+    tier = 2,
+    expiry = 2_000_000,
+    issuer = 7n,
+    salt = 5n;
   const commitment = poseidon2([secret, BigInt(tier), BigInt(expiry), issuer, salt]);
   const zeros = new Array(32).fill(0n) as bigint[];
   const falses = new Array(32).fill(false) as boolean[];
@@ -46,7 +51,8 @@ test("buildWitness assembles a 9-field public vector and derived values", () => 
   };
   const cred: CredentialMaterial = {
     holderSecret: toBytes32(secret),
-    tier, expiry,
+    tier,
+    expiry,
     issuerId: toBytes32(issuer),
     salt: toBytes32(salt),
     credSiblings: credSibs.map(toBytes32),
@@ -55,7 +61,8 @@ test("buildWitness assembles a 9-field public vector and derived values", () => 
   };
 
   const w = buildWitness(
-    cred, policy,
+    cred,
+    policy,
     { disclosedTag: 1, auditorPubkey: toBytes32(0n), auditorNonce: toBytes32(0n) },
     { corridorId: CID, now: 1_000_000 },
   );
@@ -68,7 +75,11 @@ test("buildWitness assembles a 9-field public vector and derived values", () => 
 
 test("makeFixture produces a witness buildWitness accepts", () => {
   const holder = {
-    holderSecret: 12345n, tier: 3, expiry: 9_000_000, issuerId: 7n, salt: 42n,
+    holderSecret: 12345n,
+    tier: 3,
+    expiry: 9_000_000,
+    issuerId: 7n,
+    salt: 42n,
   };
   const fx = makeFixture({
     holder,
@@ -93,7 +104,8 @@ test("makeFixture produces a witness buildWitness accepts", () => {
   };
 
   const w = buildWitness(
-    fx.credential, policy,
+    fx.credential,
+    policy,
     { disclosedTag: 2, auditorPubkey: toBytes32(0n), auditorNonce: toBytes32(7n) },
     { corridorId: CID, now: 1_000_000 },
   );
@@ -106,12 +118,20 @@ test("makeFixture produces a witness buildWitness accepts", () => {
 });
 
 test("buildWitness rejects an expired credential", () => {
-  const policy = { minTier: 1, credentialRoot: toBytes32(0n), revocationRoot: toBytes32(0n) } as CorridorPolicy;
+  const policy = {
+    minTier: 1,
+    credentialRoot: toBytes32(0n),
+    revocationRoot: toBytes32(0n),
+  } as CorridorPolicy;
   const cred = { tier: 2, expiry: 100 } as CredentialMaterial;
   assert.throws(
-    () => buildWitness(cred, policy,
-      { disclosedTag: 0, auditorPubkey: toBytes32(0n), auditorNonce: toBytes32(0n) },
-      { corridorId: CID, now: 1_000_000 }),
+    () =>
+      buildWitness(
+        cred,
+        policy,
+        { disclosedTag: 0, auditorPubkey: toBytes32(0n), auditorNonce: toBytes32(0n) },
+        { corridorId: CID, now: 1_000_000 },
+      ),
     /expired/,
   );
 });
@@ -128,7 +148,8 @@ test("getPolicy reads the smoke-test corridor from testnet", live, async () => {
 
 test("isCleared is true for the smoke-test nullifier", live, async () => {
   const c = new Corridor(TESTNET);
-  const nullifier = "0x3333333333333333333333333333333333333333333333333333333333333333" as const;
+  const nullifier =
+    "0x3333333333333333333333333333333333333333333333333333333333333333" as const;
   assert.equal(await c.isCleared(CID, nullifier), true);
   assert.equal(await c.isCleared(CID, toBytes32(0n)), false);
 });

@@ -48,7 +48,8 @@ export function buildWitness(
   opts: { corridorId: Bytes32; now: number },
 ): EligibilityWitness {
   if (req.disclosedTag >= MAX_TAG) throw new Error("disclosedTag must be < 16");
-  if (cred.tier < policy.minTier) throw new Error("credential tier below corridor minimum");
+  if (cred.tier < policy.minTier)
+    throw new Error("credential tier below corridor minimum");
   if (cred.expiry <= opts.now) throw new Error("credential expired");
 
   const secret = bytes32ToBigInt(cred.holderSecret);
@@ -60,7 +61,13 @@ export function buildWitness(
 
   const commitment = H([secret, BigInt(cred.tier), BigInt(cred.expiry), issuer, salt]);
   const nullifier = H([secret, corridorId]);
-  const auditorBlob = H([auditorPk, BigInt(cred.tier), issuer, nullifier, auditorNonce]);
+  const auditorBlob = H([
+    auditorPk,
+    BigInt(cred.tier),
+    issuer,
+    nullifier,
+    auditorNonce,
+  ]);
 
   // sanity: our inclusion path must reproduce the policy's credential root
   const credSibs = cred.credSiblings.map(bytes32ToBigInt);
@@ -74,7 +81,9 @@ export function buildWitness(
   const revSlot = H([commitment]);
   const gotRevRoot = merkleRoot(0n, revSibs, leBits(revSlot));
   if (toBytes32(gotRevRoot) !== policy.revocationRoot) {
-    throw new Error("revSiblings do not reproduce the policy revocationRoot — credential revoked?");
+    throw new Error(
+      "revSiblings do not reproduce the policy revocationRoot — credential revoked?",
+    );
   }
 
   const publicInputs: Bytes32[] = [

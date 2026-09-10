@@ -58,12 +58,14 @@ export class SorobanReader {
     return {
       operator: String(p.operator),
       acceptedIssuers: (p.accepted_issuers as Buffer[]).map(
-        (x) => (`0x${Buffer.from(x).toString("hex")}`) as Bytes32,
+        (x) => `0x${Buffer.from(x).toString("hex")}` as Bytes32,
       ),
       minTier: Number(p.min_tier),
       requiredDisclosures: Number(p.required_disclosures),
-      credentialRoot: `0x${Buffer.from(p.credential_root as Buffer).toString("hex")}` as Bytes32,
-      revocationRoot: `0x${Buffer.from(p.revocation_root as Buffer).toString("hex")}` as Bytes32,
+      credentialRoot:
+        `0x${Buffer.from(p.credential_root as Buffer).toString("hex")}` as Bytes32,
+      revocationRoot:
+        `0x${Buffer.from(p.revocation_root as Buffer).toString("hex")}` as Bytes32,
       rootEpoch: BigInt(p.root_epoch as bigint),
       verifier: String(p.verifier),
       vkHash: `0x${Buffer.from(p.vk_hash as Buffer).toString("hex")}` as Bytes32,

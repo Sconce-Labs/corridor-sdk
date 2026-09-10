@@ -37,7 +37,8 @@ class SparseTree {
 
   constructor() {
     this.zero[0] = 0n;
-    for (let i = 1; i <= DEPTH; i++) this.zero[i] = poseidon2([this.zero[i - 1]!, this.zero[i - 1]!]);
+    for (let i = 1; i <= DEPTH; i++)
+      this.zero[i] = poseidon2([this.zero[i - 1]!, this.zero[i - 1]!]);
   }
 
   private get(level: number, index: bigint): bigint {
@@ -49,7 +50,10 @@ class SparseTree {
     this.nodes.set(`0:${idx}`, leaf);
     for (let lvl = 0; lvl < DEPTH; lvl++) {
       const sib = idx ^ 1n;
-      const [l, r] = idx % 2n === 0n ? [this.get(lvl, idx), this.get(lvl, sib)] : [this.get(lvl, sib), this.get(lvl, idx)];
+      const [l, r] =
+        idx % 2n === 0n
+          ? [this.get(lvl, idx), this.get(lvl, sib)]
+          : [this.get(lvl, sib), this.get(lvl, idx)];
       idx >>= 1n;
       this.nodes.set(`${lvl + 1}:${idx}`, poseidon2([l, r]));
     }
@@ -95,7 +99,9 @@ export function makeFixture(opts: {
   const credTree = new SparseTree();
   const holderCommit = commitmentOf(opts.holder);
   credTree.insert(index, holderCommit);
-  (opts.others ?? []).forEach((a, i) => credTree.insert(BigInt(i + 1) + index + 1n, commitmentOf(a)));
+  (opts.others ?? []).forEach((a, i) =>
+    credTree.insert(BigInt(i + 1) + index + 1n, commitmentOf(a)),
+  );
 
   const revTree = new SparseTree();
   for (const c of opts.revoked ?? []) {
@@ -132,7 +138,10 @@ export function makeFixture(opts: {
 }
 
 /** Emit a Noir `Prover.toml` for the circuit from a witness. */
-export function toProverToml(publicInputs: Bytes32[], privateInputs: Record<string, unknown>): string {
+export function toProverToml(
+  publicInputs: Bytes32[],
+  privateInputs: Record<string, unknown>,
+): string {
   const q = (v: unknown): string => {
     if (Array.isArray(v)) return `[${v.map(q).join(", ")}]`;
     if (typeof v === "boolean") return String(v);
@@ -140,8 +149,15 @@ export function toProverToml(publicInputs: Bytes32[], privateInputs: Record<stri
     return `"${String(v)}"`;
   };
   const names = [
-    "credential_root", "revocation_root", "corridor_id", "min_tier", "now",
-    "nullifier", "disclosed_tag", "issuer_id", "auditor_blob",
+    "credential_root",
+    "revocation_root",
+    "corridor_id",
+    "min_tier",
+    "now",
+    "nullifier",
+    "disclosed_tag",
+    "issuer_id",
+    "auditor_blob",
   ];
   const lines = names.map((n, i) => {
     const raw = publicInputs[i]!;
