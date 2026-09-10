@@ -230,13 +230,19 @@ The SDK is one of three implementations that must agree, or nothing verifies:
 
 See [`SECURITY.md`](./SECURITY.md). In brief:
 
+- **Testnet is not a cryptographic boundary yet.** The `TESTNET` deployment
+  uses a *mock* ZK verifier (milestone M3), so a well-formed `enter()` call that
+  matches a policy is accepted without a valid proof. `isCleared` on testnet
+  attests the policy binding and one-time use, not the proof. Don't gate real
+  value on it.
 - `buildWitness` runs **entirely locally**; `privateInputs` never leave the
   process. `requestProof` only POSTs to a `proverUrl` you control.
-- `holder_secret` **must** come from a CSPRNG (`randomSecret()`); low entropy
-  makes nullifiers grindable and weakens hiding.
-- Hand the issuer `holder_binding`, never the raw `holder_secret`.
+- `holder_secret` **must** come from a CSPRNG (`randomSecret()`, enforced by
+  `buildWitness`); low entropy makes nullifiers grindable and weakens hiding.
+- Hand the issuer `holderBinding` (via `prepareCredentialRequest`), never the
+  raw `holderSecret`.
 - A malicious `rpcUrl` can lie about `isCleared` — an operator's real gate
-  should be on-chain, not only in the SDK.
+  should be an on-chain cross-contract call, not only the SDK.
 
 ---
 
