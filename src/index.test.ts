@@ -21,47 +21,30 @@ test("leBits is little-endian", () => {
 });
 
 test("buildWitness assembles a 9-field public vector and derived values", () => {
-  // build a depth-32 tree with one real leaf so the paths actually verify
-  const secret = 1n,
-    tier = 2,
-    expiry = 2_000_000,
-    issuer = 7n,
-    salt = 5n;
-  const commitment = poseidon2([secret, BigInt(tier), BigInt(expiry), issuer, salt]);
-  const zeros = new Array(32).fill(0n) as bigint[];
-  const falses = new Array(32).fill(false) as boolean[];
-  const credRoot = merkleRoot(commitment, zeros, falses);
-  const revSlot = poseidon2([commitment]);
-  const revRoot = merkleRoot(0n, zeros, leBits(revSlot));
-  const credSibs = zeros;
-  const revSibs = zeros;
-
+  const holder = {
+    holderSecret: 1n,
+    tier: 2,
+    expiry: 2_000_000,
+    issuerId: 7n,
+    salt: 5n,
+  };
+  const fx = makeFixture({ holder, index: 0n, minTier: 2 });
   const policy: CorridorPolicy = {
     operator: "G".padEnd(56, "A"),
-    acceptedIssuers: [toBytes32(issuer)],
+    acceptedIssuers: [toBytes32(7n)],
     minTier: 2,
     requiredDisclosures: 0,
-    credentialRoot: toBytes32(credRoot),
-    revocationRoot: toBytes32(revRoot),
+    credentialRoot: fx.policy.credentialRoot,
+    revocationRoot: fx.policy.revocationRoot,
     rootEpoch: 1n,
     verifier: "C".padEnd(56, "A"),
     vkHash: toBytes32(9n),
     nowToleranceSecs: 300n,
     paused: false,
   };
-  const cred: CredentialMaterial = {
-    holderSecret: toBytes32(secret),
-    tier,
-    expiry,
-    issuerId: toBytes32(issuer),
-    salt: toBytes32(salt),
-    credSiblings: credSibs.map(toBytes32),
-    credIndexBits: new Array(32).fill(false),
-    revSiblings: revSibs.map(toBytes32),
-  };
 
   const w = buildWitness(
-    cred,
+    fx.credential,
     policy,
     { disclosedTag: 1, auditorPubkey: toBytes32(0n), auditorNonce: toBytes32(0n) },
     { corridorId: CID, now: 1_000_000 },
@@ -69,8 +52,38 @@ test("buildWitness assembles a 9-field public vector and derived values", () => 
 
   assert.equal(w.publicInputs.length, 9);
   assert.equal(w.publicInputs[2], CID);
-  assert.equal(w.nullifier, toBytes32(poseidon2([secret, BigInt(CID)])));
-  assert.equal(w.commitment, toBytes32(commitment));
+  assert.equal(w.nullifier, toBytes32(poseidon2([1n, BigInt(CID)])));
+  assert.equal(w.commitment, fx.commitment);
+});
+
+test("buildWitness rejects a revoked credential", () => {
+  const holder = {
+    holderSecret: 9n,
+    tier: 3,
+    expiry: 9_000_000,
+    issuerId: 7n,
+    salt: 2n,
+  };
+  const commitment = poseidon2([9n, 3n, 9_000_000n, 7n, 2n]);
+  // put THIS credential's key in the revocation tree
+  const fx = makeFixture({ holder, index: 0n, minTier: 2, revoked: [commitment] });
+  const policy = {
+    ...({} as CorridorPolicy),
+    acceptedIssuers: [toBytes32(7n)],
+    minTier: 2,
+    credentialRoot: fx.policy.credentialRoot,
+    revocationRoot: fx.policy.revocationRoot,
+  } as CorridorPolicy;
+  assert.throws(
+    () =>
+      buildWitness(
+        fx.credential,
+        policy,
+        { disclosedTag: 1, auditorPubkey: toBytes32(0n), auditorNonce: toBytes32(0n) },
+        { corridorId: CID, now: 1_000_000 },
+      ),
+    /revoked/,
+  );
 });
 
 test("makeFixture produces a witness buildWitness accepts", () => {

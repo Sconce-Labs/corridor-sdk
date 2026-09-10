@@ -47,8 +47,13 @@ export interface CredentialMaterial {
   credSiblings: Bytes32[];
   /** Left/right direction bits for the inclusion path (false = we are the left child). */
   credIndexBits: boolean[];
-  /** Non-membership co-path under the revocation root. */
-  revSiblings: Bytes32[];
+  /** Revocation non-membership: the indexed-Merkle-tree low leaf for this
+   *  credential's revocation key, plus its inclusion path. */
+  revLowValue: Bytes32;
+  revLowNextIndex: Bytes32;
+  revLowNextValue: Bytes32;
+  revLowSiblings: Bytes32[];
+  revLowIndexBits: boolean[];
 }
 
 export interface DisclosureRequest {

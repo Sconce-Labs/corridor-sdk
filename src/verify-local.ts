@@ -8,7 +8,13 @@ import type { EligibilityWitness } from "./types.js";
 import { PI_INDEX } from "./types.js";
 import { bytes32ToBigInt } from "./hex.js";
 import { poseidon2 } from "./poseidon.js";
-import { rootFromProof, leBits } from "./merkle.js";
+import { rootFromProof, imtKey, imtLeafHash } from "./merkle.js";
+
+const KEY_MASK = (1n << 248n) - 1n;
+function lt248(a: bigint, b: bigint): boolean {
+  const diff = (b - a) & ((1n << 254n) - 1n);
+  return diff !== 0n && diff <= KEY_MASK;
+}
 
 export interface LocalCheck {
   ok: boolean;
@@ -25,7 +31,11 @@ export function verifyWitnessLocally(w: EligibilityWitness): LocalCheck {
     salt: string;
     cred_siblings: string[];
     cred_index_bits: boolean[];
-    rev_siblings: string[];
+    rev_low_value: string;
+    rev_low_next_index: string;
+    rev_low_next_value: string;
+    rev_low_siblings: string[];
+    rev_low_index_bits: boolean[];
     auditor_pk: string;
     auditor_nonce: string;
   };
@@ -48,13 +58,24 @@ export function verifyWitnessLocally(w: EligibilityWitness): LocalCheck {
   if (credRoot !== pub[PI_INDEX.credentialRoot])
     failures.push("credential not in issued set");
 
-  // 3. revocation non-membership
-  const revSlot = poseidon2([commitment]);
-  const revRoot = rootFromProof(0n, {
-    siblings: p.rev_siblings.map((s) => bytes32ToBigInt(s as `0x${string}`)),
-    bits: leBits(revSlot),
+  // 3. revocation non-membership (indexed Merkle tree low-leaf range proof)
+  const revKey = imtKey(poseidon2([commitment]));
+  const lowValue = bytes32ToBigInt(p.rev_low_value as `0x${string}`);
+  const lowNextValue = bytes32ToBigInt(p.rev_low_next_value as `0x${string}`);
+  const lowLeaf = imtLeafHash({
+    value: lowValue,
+    nextIndex: bytes32ToBigInt(p.rev_low_next_index as `0x${string}`),
+    nextValue: lowNextValue,
   });
-  if (revRoot !== pub[PI_INDEX.revocationRoot]) failures.push("credential revoked");
+  const revRoot = rootFromProof(lowLeaf, {
+    siblings: p.rev_low_siblings.map((s) => bytes32ToBigInt(s as `0x${string}`)),
+    bits: p.rev_low_index_bits,
+  });
+  if (revRoot !== pub[PI_INDEX.revocationRoot])
+    failures.push("revocation proof: bad low-leaf path");
+  else if (!lt248(lowValue, revKey)) failures.push("credential revoked");
+  else if (lowNextValue !== 0n && !lt248(revKey, lowNextValue))
+    failures.push("credential revoked");
 
   // 4/5 tier + expiry
   if (BigInt(p.tier) < pub[PI_INDEX.minTier]!) failures.push("tier below minimum");

@@ -26,7 +26,15 @@ export * from "./types.js";
 export { TESTNET, MAINNET, fromEnv, DisclosureTag } from "./networks.js";
 export { buildWitness, merkleRoot } from "./witness.js";
 export { poseidon2, CONFORMANCE_VECTOR } from "./poseidon.js";
-export { SparseTree, rootFromProof, leBits, DEPTH } from "./merkle.js";
+export {
+  SparseTree,
+  rootFromProof,
+  leBits,
+  DEPTH,
+  IndexedMerkleTree,
+  imtKey,
+  imtLeafHash,
+} from "./merkle.js";
 export { makeFixture, toProverToml, commitmentOf } from "./fixture.js";
 export { SorobanReader } from "./soroban.js";
 export type { PassRecord } from "./soroban.js";

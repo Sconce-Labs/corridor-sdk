@@ -13,9 +13,16 @@ import type {
 import { PI_LEN } from "./types.js";
 import { bytes32ToBigInt, numberToWord, toBytes32 } from "./hex.js";
 import { poseidon2 } from "./poseidon.js";
-import { rootFromProof, leBits } from "./merkle.js";
+import { rootFromProof, imtKey, imtLeafHash } from "./merkle.js";
 
 const MAX_TAG = 16;
+const KEY_MASK = (1n << 248n) - 1n;
+
+/** `a < b` for values < 2^248 (mirrors the circuit's `lt_248`). */
+function lt248(a: bigint, b: bigint): boolean {
+  const diff = (b - a) & ((1n << 254n) - 1n);
+  return diff !== 0n && diff <= KEY_MASK;
+}
 
 /** Root from a leaf + flat sibling/bit arrays (thin wrapper over rootFromProof). */
 export function merkleRoot(leaf: bigint, siblings: bigint[], bits: boolean[]): bigint {
@@ -56,10 +63,9 @@ export function buildWitness(
     auditorNonce,
   ]);
 
-  // Re-derive the roots from the supplied paths and fail locally on a stale or
-  // revoked credential, before any proof is generated.
+  // Re-derive both roots from the supplied paths and fail locally — on a stale
+  // inclusion path, or a revoked credential — before any proof is generated.
   const credSibs = cred.credSiblings.map(bytes32ToBigInt);
-  const revSibs = cred.revSiblings.map(bytes32ToBigInt);
   if (
     toBytes32(merkleRoot(commitment, credSibs, cred.credIndexBits)) !==
     policy.credentialRoot
@@ -68,11 +74,29 @@ export function buildWitness(
       "credSiblings/credIndexBits do not reproduce the policy credentialRoot — stale path?",
     );
   }
-  const revSlot = poseidon2([commitment]);
-  if (toBytes32(merkleRoot(0n, revSibs, leBits(revSlot))) !== policy.revocationRoot) {
-    throw new Error(
-      "revSiblings do not reproduce the policy revocationRoot — credential revoked?",
-    );
+
+  // revocation non-membership: the low leaf's path must reach revocationRoot,
+  // and `lowValue < revKey < lowNextValue` (or the low leaf is the tail).
+  const revKey = imtKey(poseidon2([commitment]) & KEY_MASK);
+  const lowValue = bytes32ToBigInt(cred.revLowValue);
+  const lowNextValue = bytes32ToBigInt(cred.revLowNextValue);
+  const lowLeaf = imtLeafHash({
+    value: lowValue,
+    nextIndex: bytes32ToBigInt(cred.revLowNextIndex),
+    nextValue: lowNextValue,
+  });
+  const revSibs = cred.revLowSiblings.map(bytes32ToBigInt);
+  if (
+    toBytes32(merkleRoot(lowLeaf, revSibs, cred.revLowIndexBits)) !==
+    policy.revocationRoot
+  ) {
+    throw new Error("revLow* path does not reproduce the policy revocationRoot");
+  }
+  if (!lt248(lowValue, revKey)) {
+    throw new Error("credential is revoked (revKey <= low leaf value)");
+  }
+  if (lowNextValue !== 0n && !lt248(revKey, lowNextValue)) {
+    throw new Error("credential is revoked (revKey outside the low-leaf gap)");
   }
 
   const publicInputs: Bytes32[] = [
@@ -97,7 +121,11 @@ export function buildWitness(
       salt: cred.salt,
       cred_siblings: cred.credSiblings,
       cred_index_bits: cred.credIndexBits,
-      rev_siblings: cred.revSiblings,
+      rev_low_value: cred.revLowValue,
+      rev_low_next_index: cred.revLowNextIndex,
+      rev_low_next_value: cred.revLowNextValue,
+      rev_low_siblings: cred.revLowSiblings,
+      rev_low_index_bits: cred.revLowIndexBits,
       auditor_pk: req.auditorPubkey,
       auditor_nonce: req.auditorNonce,
     },
@@ -107,6 +135,6 @@ export function buildWitness(
   };
 }
 
-// Back-compat re-exports.
+// Re-exports.
 export { poseidon2 } from "./poseidon.js";
-export { leBits } from "./merkle.js";
+export { leBits, imtKey, IndexedMerkleTree } from "./merkle.js";

@@ -9,7 +9,7 @@
 import type { Bytes32, CorridorPolicy, CredentialMaterial } from "./types.js";
 import { toBytes32, bytes32ToBigInt } from "./hex.js";
 import { poseidon2 } from "./poseidon.js";
-import { SparseTree, leBits, DEPTH } from "./merkle.js";
+import { SparseTree, IndexedMerkleTree, imtKey } from "./merkle.js";
 
 export interface CredentialAttrs {
   holderSecret: bigint;
@@ -55,18 +55,15 @@ export function makeFixture(opts: {
     credTree.insert(BigInt(i) + index + 1n, commitmentOf(a)),
   );
 
-  const revTree = new SparseTree();
+  // Revocation as an indexed Merkle tree keyed by imtKey(Poseidon2(commitment)).
+  const revTree = new IndexedMerkleTree();
   for (const c of opts.revoked ?? []) {
-    revTree.insert(BigInt.asUintN(DEPTH, poseidon2([c])), 1n);
+    revTree.insert(imtKey(poseidon2([c])));
   }
 
   const credProof = credTree.proof(index);
-  const revSlot = poseidon2([holderCommit]);
-  const revProof = revTree.proof(BigInt.asUintN(DEPTH, revSlot));
-  const expectBits = leBits(revSlot);
-  if (revProof.bits.some((b, i) => b !== expectBits[i])) {
-    throw new Error("revocation slot bit derivation mismatch");
-  }
+  const revKey = imtKey(poseidon2([holderCommit]));
+  const low = revTree.lowLeafProof(revKey);
 
   return {
     policy: {
@@ -83,7 +80,11 @@ export function makeFixture(opts: {
       salt: toBytes32(opts.holder.salt),
       credSiblings: credProof.siblings.map(toBytes32),
       credIndexBits: credProof.bits,
-      revSiblings: revProof.siblings.map(toBytes32),
+      revLowValue: toBytes32(low.leaf.value),
+      revLowNextIndex: toBytes32(low.leaf.nextIndex),
+      revLowNextValue: toBytes32(low.leaf.nextValue),
+      revLowSiblings: low.siblings.map(toBytes32),
+      revLowIndexBits: low.bits,
     },
   };
 }
