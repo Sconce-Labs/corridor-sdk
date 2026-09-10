@@ -20,8 +20,10 @@ import type {
 } from "./types.js";
 import { SorobanReader } from "./soroban.js";
 import { buildWitness } from "./witness.js";
+import { fromEnv } from "./networks.js";
 
 export * from "./types.js";
+export { TESTNET, MAINNET, fromEnv, DisclosureTag } from "./networks.js";
 export { buildWitness, merkleRoot } from "./witness.js";
 export { poseidon2, CONFORMANCE_VECTOR } from "./poseidon.js";
 export { SparseTree, rootFromProof, leBits, DEPTH } from "./merkle.js";
@@ -41,6 +43,11 @@ export class Corridor {
     this.reader = new SorobanReader(cfg);
   }
 
+  /** Build from `CORRIDOR_*` env vars (falls back to testnet). */
+  static fromEnv(env: NodeJS.ProcessEnv = process.env): Corridor {
+    return new Corridor(fromEnv(env));
+  }
+
   /** Fetch a corridor's on-chain policy. */
   getPolicy(corridorId: Bytes32): Promise<CorridorPolicy> {
     return this.reader.getPolicy(corridorId);
@@ -49,6 +56,11 @@ export class Corridor {
   /** The payout gate: has this nullifier been granted a pass on this corridor? */
   isCleared(corridorId: Bytes32, nullifier: Bytes32): Promise<boolean> {
     return this.reader.isCleared(corridorId, nullifier);
+  }
+
+  /** The full pass record (tag, ledger, timestamp, auditor blob), or null. */
+  passRecord(corridorId: Bytes32, nullifier: Bytes32) {
+    return this.reader.passRecord(corridorId, nullifier);
   }
 
   /** Aggregate pass count for a corridor. */

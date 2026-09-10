@@ -96,6 +96,36 @@ export class SorobanReader {
     if ("error" in r) throw new Error(`passes: ${r.error}`);
     return BigInt(r.value as bigint);
   }
+
+  /** The full `PassRecord` for a granted nullifier, or null. */
+  async passRecord(
+    corridorId: Bytes32,
+    nullifier: Bytes32,
+  ): Promise<PassRecord | null> {
+    const r = await this.simulate(
+      this.cfg.attestationContractId,
+      "pass_record",
+      b32(corridorId),
+      b32(nullifier),
+    );
+    if ("error" in r) throw new Error(`pass_record: ${r.error}`);
+    if (r.value == null) return null;
+    const p = r.value as Record<string, unknown>;
+    return {
+      tag: Number(p.tag),
+      ledger: Number(p.ledger),
+      timestamp: BigInt(p.timestamp as bigint),
+      auditorBlob:
+        `0x${Buffer.from(p.auditor_blob as Buffer).toString("hex")}` as Bytes32,
+    };
+  }
+}
+
+export interface PassRecord {
+  tag: number;
+  ledger: number;
+  timestamp: bigint;
+  auditorBlob: Bytes32;
 }
 
 // Re-export for callers that want to build their own scvals.
