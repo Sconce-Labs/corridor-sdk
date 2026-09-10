@@ -29,6 +29,9 @@ export { poseidon2, CONFORMANCE_VECTOR } from "./poseidon.js";
 export { SparseTree, rootFromProof, leBits, DEPTH } from "./merkle.js";
 export { makeFixture, toProverToml, commitmentOf } from "./fixture.js";
 export { SorobanReader } from "./soroban.js";
+export type { PassRecord } from "./soroban.js";
+export { verifyWitnessLocally } from "./verify-local.js";
+export type { LocalCheck } from "./verify-local.js";
 export * from "./hex.js";
 
 export interface Proof {
