@@ -1,26 +1,25 @@
 /**
  * Cross-component integration: the witness the SDK builds must (1) satisfy the
- * circuit's constraints (verifyWitnessLocally mirrors `eligibility::check`),
+ * circuit's constraints (verifyWitnessLocally mirrors `eligibility::check`) and
  * (2) carry a public-input vector in the exact `PI_INDEX` layout the Soroban
- * contract's `PublicInputs::decode` expects, and (3) round-trip a revoked
- * credential to a rejection.
+ * contract's `PublicInputs::decode` expects.
  *
  * The circuit ⇄ SDK seam is also checked in CI end-to-end: `npm run gen-fixture`
- * writes corridor-circuits' `Prover.toml` and `nargo execute` solves it.
+ * writes corridor-circuits' `Prover.toml` + `fixture.nr` and `nargo execute`
+ * solves it.
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildWitness } from "./witness.js";
 import { makeFixture } from "./fixture.js";
 import { verifyWitnessLocally } from "./verify-local.js";
-import { poseidon2 } from "./poseidon.js";
 import { PI_INDEX, PI_LEN } from "./types.js";
 import type { CorridorPolicy } from "./types.js";
 import { toBytes32, bytes32ToBigInt } from "./hex.js";
 
 const CID =
   "0x0000000000000000000000000000000000000000000000000000000000000004" as const;
-const AUDITOR = toBytes32(0xa0d170n); // a non-zero auditor key
+const AUDITOR = toBytes32(0xa0d170n);
 
 function policy(
   fx: ReturnType<typeof makeFixture>,
@@ -28,12 +27,10 @@ function policy(
 ): CorridorPolicy {
   return {
     operator: "G".padEnd(56, "A"),
-    acceptedIssuers: [toBytes32(7n)],
-    minTier: fx.policy.minTier,
+    acceptedIssuers: [fx.issuerId],
+    minTier: 3,
     requiredDisclosures: 0,
-    credentialRoot: fx.policy.credentialRoot,
-    revocationRoot: fx.policy.revocationRoot,
-    rootEpoch: 1n,
+    minCredEpoch: 1n,
     verifier: "C".padEnd(56, "A"),
     vkHash: toBytes32(9n),
     auditorPubkey: toBytes32(0n),
@@ -43,16 +40,8 @@ function policy(
   };
 }
 
-const holder = {
-  holderSecret: 424242n,
-  tier: 4,
-  expiry: 9_999_999,
-  issuerId: 7n,
-  salt: 11n,
-};
-
 test("SDK witness satisfies the circuit and matches the contract ABI layout", () => {
-  const fx = makeFixture({ holder, index: 5n, minTier: 3 });
+  const fx = makeFixture({ holder: { tier: 4, credEpoch: 9 } });
   const w = buildWitness(
     fx.credential,
     policy(fx, { auditorPubkey: AUDITOR }),
@@ -60,64 +49,57 @@ test("SDK witness satisfies the circuit and matches the contract ABI layout", ()
     { corridorId: CID, now: 1_000_000 },
   );
 
-  // 1. circuit constraints
   assert.deepEqual(verifyWitnessLocally(w), { ok: true, failures: [] });
 
-  // 2. ABI layout — the exact slots corridor_types::PublicInputs::decode reads
-  assert.equal(w.publicInputs.length, PI_LEN);
-  assert.equal(w.publicInputs[PI_INDEX.credentialRoot], fx.policy.credentialRoot);
-  assert.equal(w.publicInputs[PI_INDEX.revocationRoot], fx.policy.revocationRoot);
+  assert.equal(w.publicInputs.length, PI_LEN); // 9
   assert.equal(w.publicInputs[PI_INDEX.corridorId], CID);
   assert.equal(bytes32ToBigInt(w.publicInputs[PI_INDEX.minTier]!), 3n);
   assert.equal(bytes32ToBigInt(w.publicInputs[PI_INDEX.now]!), 1_000_000n);
-  assert.equal(
-    w.publicInputs[PI_INDEX.nullifier],
-    toBytes32(poseidon2([424242n, BigInt(CID)])),
-  );
-  assert.equal(bytes32ToBigInt(w.publicInputs[PI_INDEX.disclosedTag]!), 2n);
-  assert.equal(w.publicInputs[PI_INDEX.issuerId], toBytes32(7n));
+  assert.equal(w.publicInputs[PI_INDEX.issuerId], fx.issuerId);
+  assert.equal(bytes32ToBigInt(w.publicInputs[PI_INDEX.minCredEpoch]!), 1n);
   assert.equal(w.publicInputs[PI_INDEX.auditorPubkey], AUDITOR);
   assert.equal(w.publicInputs[PI_INDEX.auditorBlob], w.auditorBlob);
 });
 
-test("a revoked credential is rejected before proving", () => {
-  const commitment = poseidon2([
-    holder.holderSecret,
-    BigInt(holder.tier),
-    BigInt(holder.expiry),
-    holder.issuerId,
-    holder.salt,
-  ]);
-  const fx = makeFixture({ holder, index: 5n, minTier: 3, revoked: [commitment] });
-  assert.throws(
-    () =>
-      buildWitness(
-        fx.credential,
-        policy(fx),
-        { disclosedTag: 0, auditorPubkey: toBytes32(0n), auditorNonce: toBytes32(1n) },
-        { corridorId: CID, now: 1_000_000 },
-      ),
-    /revoked/,
-  );
-});
-
-test("the auditor blob is bound to the auditor key, not holder-chosen", () => {
-  const fx = makeFixture({ holder, index: 5n, minTier: 3 });
-  const w1 = buildWitness(
+test("a proof from an issuer not on the allowlist would fail the contract's check", () => {
+  // buildWitness itself does not enforce the allowlist (the contract does), but
+  // the issuer_id it emits must be the one the contract compares.
+  const fx = makeFixture();
+  const other = makeFixture();
+  const w = buildWitness(
     fx.credential,
     policy(fx),
+    { disclosedTag: 0, auditorPubkey: toBytes32(0n), auditorNonce: toBytes32(1n) },
+    { corridorId: CID, now: 1_000_000 },
+  );
+  assert.notEqual(w.publicInputs[PI_INDEX.issuerId], other.issuerId);
+});
+
+test("the auditor blob is bound to the policy's auditor key", () => {
+  const fx = makeFixture();
+  const w1 = buildWitness(
+    fx.credential,
+    policy(fx, { auditorPubkey: toBytes32(1n) }),
     { disclosedTag: 0, auditorPubkey: toBytes32(1n), auditorNonce: toBytes32(5n) },
     { corridorId: CID, now: 1_000_000 },
   );
   const w2 = buildWitness(
     fx.credential,
-    policy(fx),
+    policy(fx, { auditorPubkey: toBytes32(2n) }),
     { disclosedTag: 0, auditorPubkey: toBytes32(2n), auditorNonce: toBytes32(5n) },
     { corridorId: CID, now: 1_000_000 },
   );
   assert.notEqual(w1.auditorBlob, w2.auditorBlob);
-  assert.notEqual(
-    w1.publicInputs[PI_INDEX.auditorPubkey],
-    w2.publicInputs[PI_INDEX.auditorPubkey],
+
+  // a proof that claims a different auditor key than the policy is refused locally
+  assert.throws(
+    () =>
+      buildWitness(
+        fx.credential,
+        policy(fx, { auditorPubkey: toBytes32(1n) }),
+        { disclosedTag: 0, auditorPubkey: toBytes32(9n), auditorNonce: toBytes32(5n) },
+        { corridorId: CID, now: 1_000_000 },
+      ),
+    /auditor key/,
   );
 });

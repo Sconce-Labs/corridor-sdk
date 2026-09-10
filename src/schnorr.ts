@@ -89,7 +89,13 @@ export function publicKey(privateKey: Bytes32): SchnorrPublicKey {
   return { x: toBytes32(P.x), y: toBytes32(P.y) };
 }
 
-/** Sign a single-field message with the in-circuit scheme. */
+/**
+ * Sign a single-field message with the in-circuit scheme.
+ *
+ * The nonce is derived deterministically from (private key, message, counter)
+ * — EdDSA-style — so a given key never reuses a nonce across messages (nonce
+ * reuse leaks the key) and fixtures are byte-stable across regenerations.
+ */
 export function sign(privateKey: Bytes32, message: Bytes32): SchnorrSignature {
   const d = bytes32ToBigInt(privateKey);
   const A = GrumpkinPoint.BASE.multiply(d).toAffine();
@@ -97,8 +103,8 @@ export function sign(privateKey: Bytes32, message: Bytes32): SchnorrSignature {
 
   let s = 0n;
   let e = 0n;
-  while (s === 0n || e === 0n) {
-    const k = randScalar();
+  for (let counter = 0n; s === 0n || e === 0n; counter++) {
+    const k = poseidon2([d, m, counter]) % GRUMPKIN_Q;
     if (k === 0n) continue;
     const R = GrumpkinPoint.BASE.multiply(k).toAffine();
     e = poseidon2([SCHNORR_CHALLENGE_DST, R.x, A.x, A.y, m]);

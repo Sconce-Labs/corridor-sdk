@@ -21,7 +21,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - run: npx tsx scripts/gen-fixture.ts > /dev/null
+      - run: npm run gen-fixture > /dev/null   # builds a real signed witness (smoke test)
 
   live:
     name: live testnet reads (non-blocking)

@@ -24,7 +24,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "format": "prettier --write \"src/**/*.ts\" \"examples/**/*.ts\" \"*.json\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"examples/**/*.ts\"",
-    "gen-fixture": "tsx scripts/gen-fixture.ts",
+    "gen-fixture": "tsx scripts/gen-circuit-fixture.ts",
     "docs": "typedoc"
   },
   "keywords": [
@@ -51,5 +51,8 @@
     "tsx": "^4.23.1",
     "typedoc": "^0.26.0",
     "typescript": "^5.6.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

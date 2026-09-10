@@ -3,34 +3,35 @@
  * `corridor-contracts/crates/corridor_types` (`PI_*`) and
  * `corridor-circuits/corridor_eligibility/src/main.nr`. A change there is a
  * coordinated change here — see `corridor-contracts/ABI.md`.
+ *
+ * Option B (issuer-signed statements): no credential/revocation Merkle roots.
  */
 
 /** A 32-byte value as a lowercase, `0x`-prefixed hex string. */
 export type Bytes32 = `0x${string}`;
 
 export const PI_INDEX = {
-  credentialRoot: 0,
-  revocationRoot: 1,
-  corridorId: 2,
-  minTier: 3,
-  now: 4,
-  nullifier: 5,
-  disclosedTag: 6,
-  issuerId: 7,
-  auditorPubkey: 8,
-  auditorBlob: 9,
+  corridorId: 0,
+  minTier: 1,
+  now: 2,
+  nullifier: 3,
+  disclosedTag: 4,
+  issuerId: 5,
+  minCredEpoch: 6,
+  auditorPubkey: 7,
+  auditorBlob: 8,
 } as const;
 
-export const PI_LEN = 10;
+export const PI_LEN = 9;
 
 export interface CorridorPolicy {
   operator: string;
+  /** issuer ids = `Poseidon2(issuer_pk.x, issuer_pk.y)` per accepted issuer */
   acceptedIssuers: Bytes32[];
   minTier: number;
   requiredDisclosures: number;
-  credentialRoot: Bytes32;
-  revocationRoot: Bytes32;
-  rootEpoch: bigint;
+  /** bulk-revocation floor: a credential's `credEpoch` must be `>=` this */
+  minCredEpoch: bigint;
   verifier: string;
   vkHash: Bytes32;
   /** Auditor key `auditor_blob` must bind to. `0x00…00` = no auditor. */
@@ -39,24 +40,28 @@ export interface CorridorPolicy {
   paused: boolean;
 }
 
+/** An issuer's Grumpkin Schnorr key pair identity + the signature it produced. */
+export interface IssuerSignature {
+  /** issuer public key, Grumpkin point */
+  pubkeyX: Bytes32;
+  pubkeyY: Bytes32;
+  /** signature (s, e) as 128-bit limb pairs */
+  sLo: Bytes32;
+  sHi: Bytes32;
+  eLo: Bytes32;
+  eHi: Bytes32;
+}
+
 /** Everything the holder's wallet holds for one credential. */
 export interface CredentialMaterial {
   holderSecret: Bytes32;
   tier: number;
   expiry: number;
-  issuerId: Bytes32;
+  /** the issuer's credential epoch — must stay `>=` the corridor's floor */
+  credEpoch: number;
   salt: Bytes32;
-  /** Inclusion co-path under the issuer-set root, leaf → root. */
-  credSiblings: Bytes32[];
-  /** Left/right direction bits for the inclusion path (false = we are the left child). */
-  credIndexBits: boolean[];
-  /** Revocation non-membership: the indexed-Merkle-tree low leaf for this
-   *  credential's revocation key, plus its inclusion path. */
-  revLowValue: Bytes32;
-  revLowNextIndex: Bytes32;
-  revLowNextValue: Bytes32;
-  revLowSiblings: Bytes32[];
-  revLowIndexBits: boolean[];
+  /** the issuer's signature over `{ holderBinding, tier, expiry, credEpoch }` */
+  issuer: IssuerSignature;
 }
 
 export interface DisclosureRequest {
@@ -75,7 +80,7 @@ export interface EligibilityWitness {
   /** Private witness map, keyed exactly as the circuit's `main` params. */
   privateInputs: Record<string, unknown>;
   /** Derived values a caller commonly needs. */
-  commitment: Bytes32;
+  issuerId: Bytes32;
   nullifier: Bytes32;
   auditorBlob: Bytes32;
 }

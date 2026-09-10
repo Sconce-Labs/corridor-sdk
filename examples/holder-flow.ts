@@ -1,38 +1,27 @@
 /**
- * The holder flow with a local fixture (no Midnight deployment needed yet):
- * build a witness, emit a Prover.toml, and show the derived nullifier.
+ * The holder flow (Option B): an issuer signs a credential, the holder builds a
+ * witness for a corridor. No Midnight deployment needed.
  *   npx tsx examples/holder-flow.ts
  */
-import { Corridor, TESTNET, makeFixture, toProverToml } from "../src/index.js";
+import { Corridor, TESTNET, makeFixture, verifyWitnessLocally } from "../src/index.js";
 import type { CorridorPolicy } from "../src/index.js";
 
 const CID =
   "0x0000000000000000000000000000000000000000000000000000000000000004" as const;
 const now = Math.floor(Date.now() / 1000);
 
-// A real holder reads paths from the Midnight indexer; here we synthesise a tree.
+// A regulated issuer signs a credential for the holder.
 const fx = makeFixture({
-  holder: {
-    holderSecret: 0xdeadn,
-    tier: 3,
-    expiry: now + 86_400,
-    issuerId: 7n,
-    salt: 99n,
-  },
-  index: 1n,
-  minTier: 2,
+  holder: { tier: 3, expiry: now + 30 * 86_400, credEpoch: 12 },
 });
 
+// The corridor operator's policy accepts that issuer.
 const policy: CorridorPolicy = {
   operator: "G".padEnd(56, "A"),
-  acceptedIssuers: [
-    "0x0000000000000000000000000000000000000000000000000000000000000007",
-  ],
-  minTier: fx.policy.minTier,
+  acceptedIssuers: [fx.issuerId],
+  minTier: 2,
   requiredDisclosures: 0,
-  credentialRoot: fx.policy.credentialRoot,
-  revocationRoot: fx.policy.revocationRoot,
-  rootEpoch: 1n,
+  minCredEpoch: 10n,
   verifier: "C".padEnd(56, "A"),
   vkHash: "0x0000000000000000000000000000000000000000000000000000000000000009",
   auditorPubkey: "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -52,8 +41,8 @@ const witness = c.buildWitness(
   { corridorId: CID, now },
 );
 
-console.log("nullifier   :", witness.nullifier);
-console.log("commitment  :", witness.commitment);
-console.log(
-  "\nProver.toml:\n" + toProverToml(witness.publicInputs, witness.privateInputs),
-);
+console.log("issuer id :", witness.issuerId);
+console.log("nullifier :", witness.nullifier);
+console.log("local check:", verifyWitnessLocally(witness));
+console.log("public inputs (9):");
+witness.publicInputs.forEach((v, i) => console.log(`  [${i}] ${v}`));

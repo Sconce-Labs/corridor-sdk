@@ -24,18 +24,23 @@ import { fromEnv } from "./networks.js";
 
 export * from "./types.js";
 export { TESTNET, MAINNET, fromEnv, DisclosureTag } from "./networks.js";
-export { buildWitness, merkleRoot } from "./witness.js";
+export {
+  buildWitness,
+  statementMessage,
+  holderBinding,
+  issuerIdOf,
+} from "./witness.js";
 export { poseidon2, CONFORMANCE_VECTOR } from "./poseidon.js";
 export {
-  SparseTree,
-  rootFromProof,
-  leBits,
-  DEPTH,
-  IndexedMerkleTree,
-  imtKey,
-  imtLeafHash,
-} from "./merkle.js";
-export { makeFixture, toProverToml, commitmentOf } from "./fixture.js";
+  GRUMPKIN_P,
+  GRUMPKIN_Q,
+  SCHNORR_CHALLENGE_DST,
+  randomIssuerKey,
+  publicKey,
+  sign,
+  verify as verifySchnorrSignature,
+} from "./schnorr.js";
+export { makeFixture, issueCredential } from "./fixture.js";
 export { SorobanReader } from "./soroban.js";
 export type { PassRecord } from "./soroban.js";
 export { verifyWitnessLocally } from "./verify-local.js";

@@ -1,6 +1,6 @@
 /**
- * Build the Noir circuit witness from credential material + a corridor policy.
- * Poseidon2 (`./poseidon`) is pinned to the circuit; see `poseidon.ts`.
+ * Build the Noir circuit witness (Option B) from credential material — an
+ * issuer-signed statement — plus a corridor policy. No Merkle trees.
  */
 
 import type {
@@ -13,20 +13,29 @@ import type {
 import { PI_LEN } from "./types.js";
 import { bytes32ToBigInt, numberToWord, toBytes32 } from "./hex.js";
 import { poseidon2 } from "./poseidon.js";
-import { rootFromProof, imtKey, imtLeafHash } from "./merkle.js";
+import { verify as verifySchnorr } from "./schnorr.js";
 
 const MAX_TAG = 16;
-const KEY_MASK = (1n << 248n) - 1n;
 
-/** `a < b` for values < 2^248 (mirrors the circuit's `lt_248`). */
-function lt248(a: bigint, b: bigint): boolean {
-  const diff = (b - a) & ((1n << 254n) - 1n);
-  return diff !== 0n && diff <= KEY_MASK;
+/** `Poseidon2(holder_secret, salt)` — the holder-hiding value the issuer signs. */
+export function holderBinding(holderSecret: Bytes32, salt: Bytes32): bigint {
+  return poseidon2([bytes32ToBigInt(holderSecret), bytes32ToBigInt(salt)]);
 }
 
-/** Root from a leaf + flat sibling/bit arrays (thin wrapper over rootFromProof). */
-export function merkleRoot(leaf: bigint, siblings: bigint[], bits: boolean[]): bigint {
-  return rootFromProof(leaf, { siblings, bits });
+/** The exact message an issuer signs for a credential. */
+export function statementMessage(cred: CredentialMaterial): Bytes32 {
+  return toBytes32(
+    poseidon2([
+      holderBinding(cred.holderSecret, cred.salt),
+      BigInt(cred.tier),
+      BigInt(cred.expiry),
+      BigInt(cred.credEpoch),
+    ]),
+  );
+}
+
+export function issuerIdOf(pubkeyX: Bytes32, pubkeyY: Bytes32): Bytes32 {
+  return toBytes32(poseidon2([bytes32ToBigInt(pubkeyX), bytes32ToBigInt(pubkeyY)]));
 }
 
 export function buildWitness(
@@ -39,77 +48,45 @@ export function buildWitness(
   if (cred.tier < policy.minTier)
     throw new Error("credential tier below corridor minimum");
   if (cred.expiry <= opts.now) throw new Error("credential expired");
+  if (BigInt(cred.credEpoch) < policy.minCredEpoch)
+    throw new Error("credential epoch is below the corridor's revocation floor");
 
   const secret = bytes32ToBigInt(cred.holderSecret);
-  const issuer = bytes32ToBigInt(cred.issuerId);
-  const salt = bytes32ToBigInt(cred.salt);
-  const corridorId = bytes32ToBigInt(opts.corridorId);
-  const auditorPk = bytes32ToBigInt(req.auditorPubkey);
-  const auditorNonce = bytes32ToBigInt(req.auditorNonce);
+  const issuer = cred.issuer;
+  const issuerId = issuerIdOf(issuer.pubkeyX, issuer.pubkeyY);
 
-  const commitment = poseidon2([
-    secret,
-    BigInt(cred.tier),
-    BigInt(cred.expiry),
-    issuer,
-    salt,
-  ]);
-  const nullifier = poseidon2([secret, corridorId]);
-  // auditorPk is the corridor's auditor key (public), bound by the proof and
-  // checked equal to policy.auditorPubkey on-chain.
+  // fail locally on a bad/forged signature before any proof is generated
+  const message = statementMessage(cred);
+  if (
+    !verifySchnorr(
+      { x: issuer.pubkeyX, y: issuer.pubkeyY },
+      { sLo: issuer.sLo, sHi: issuer.sHi, eLo: issuer.eLo, eHi: issuer.eHi },
+      message,
+    )
+  ) {
+    throw new Error("issuer signature does not verify over the credential statement");
+  }
+  if (req.auditorPubkey !== policy.auditorPubkey) {
+    throw new Error("auditorPubkey must equal the corridor policy's auditor key");
+  }
+
+  const nullifier = poseidon2([secret, bytes32ToBigInt(opts.corridorId)]);
   const auditorBlob = poseidon2([
-    auditorPk,
+    bytes32ToBigInt(req.auditorPubkey),
     BigInt(cred.tier),
-    issuer,
+    bytes32ToBigInt(issuerId),
     nullifier,
-    auditorNonce,
+    bytes32ToBigInt(req.auditorNonce),
   ]);
-
-  // Re-derive both roots from the supplied paths and fail locally — on a stale
-  // inclusion path, or a revoked credential — before any proof is generated.
-  const credSibs = cred.credSiblings.map(bytes32ToBigInt);
-  if (
-    toBytes32(merkleRoot(commitment, credSibs, cred.credIndexBits)) !==
-    policy.credentialRoot
-  ) {
-    throw new Error(
-      "credSiblings/credIndexBits do not reproduce the policy credentialRoot — stale path?",
-    );
-  }
-
-  // revocation non-membership: the low leaf's path must reach revocationRoot,
-  // and `lowValue < revKey < lowNextValue` (or the low leaf is the tail).
-  const revKey = imtKey(poseidon2([commitment]) & KEY_MASK);
-  const lowValue = bytes32ToBigInt(cred.revLowValue);
-  const lowNextValue = bytes32ToBigInt(cred.revLowNextValue);
-  const lowLeaf = imtLeafHash({
-    value: lowValue,
-    nextIndex: bytes32ToBigInt(cred.revLowNextIndex),
-    nextValue: lowNextValue,
-  });
-  const revSibs = cred.revLowSiblings.map(bytes32ToBigInt);
-  if (
-    toBytes32(merkleRoot(lowLeaf, revSibs, cred.revLowIndexBits)) !==
-    policy.revocationRoot
-  ) {
-    throw new Error("revLow* path does not reproduce the policy revocationRoot");
-  }
-  if (!lt248(lowValue, revKey)) {
-    throw new Error("credential is revoked (revKey <= low leaf value)");
-  }
-  if (lowNextValue !== 0n && !lt248(revKey, lowNextValue)) {
-    throw new Error("credential is revoked (revKey outside the low-leaf gap)");
-  }
 
   const publicInputs: Bytes32[] = [
-    policy.credentialRoot,
-    policy.revocationRoot,
     opts.corridorId,
     numberToWord(policy.minTier),
     numberToWord(opts.now),
     toBytes32(nullifier),
     numberToWord(req.disclosedTag),
-    cred.issuerId,
+    issuerId,
+    numberToWord(policy.minCredEpoch),
     req.auditorPubkey,
     toBytes32(auditorBlob),
   ];
@@ -121,22 +98,20 @@ export function buildWitness(
       holder_secret: cred.holderSecret,
       tier: cred.tier,
       expiry: cred.expiry,
+      cred_epoch: cred.credEpoch,
       salt: cred.salt,
-      cred_siblings: cred.credSiblings,
-      cred_index_bits: cred.credIndexBits,
-      rev_low_value: cred.revLowValue,
-      rev_low_next_index: cred.revLowNextIndex,
-      rev_low_next_value: cred.revLowNextValue,
-      rev_low_siblings: cred.revLowSiblings,
-      rev_low_index_bits: cred.revLowIndexBits,
+      issuer_pk_x: issuer.pubkeyX,
+      issuer_pk_y: issuer.pubkeyY,
+      sig_s_lo: issuer.sLo,
+      sig_s_hi: issuer.sHi,
+      sig_e_lo: issuer.eLo,
+      sig_e_hi: issuer.eHi,
       auditor_nonce: req.auditorNonce,
     },
-    commitment: toBytes32(commitment),
+    issuerId,
     nullifier: toBytes32(nullifier),
     auditorBlob: toBytes32(auditorBlob),
   };
 }
 
-// Re-exports.
 export { poseidon2 } from "./poseidon.js";
-export { leBits, imtKey, IndexedMerkleTree } from "./merkle.js";
