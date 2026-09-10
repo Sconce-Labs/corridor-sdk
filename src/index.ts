@@ -108,11 +108,13 @@ export class Corridor {
     };
   }
 
-  /** Submit `enter` via the fee-sponsoring relayer so the holder's account
-   *  stays unlinked from the pass. */
+  /** Submit `enter` via the **fee-sponsoring transaction relayer** so the
+   *  holder's Stellar account is never linked to the pass. This is NOT
+   *  `corridor-relayer` (that syncs roots) — it is the service specced in
+   *  corridor/docs/TX_RELAYER.md, which is not built yet. */
   async enter(corridorId: Bytes32, proof: Proof): Promise<{ txHash: string }> {
     if (!this.cfg.relayerUrl) {
-      throw new Error("no relayerUrl configured (M6)");
+      throw new Error("no relayerUrl configured — see corridor/docs/TX_RELAYER.md");
     }
     const res = await fetch(`${this.cfg.relayerUrl}/enter`, {
       method: "POST",
