@@ -52,6 +52,7 @@ export type { PassRecord } from "./soroban.js";
 export { verifyWitnessLocally } from "./verify-local.js";
 export type { LocalCheck } from "./verify-local.js";
 export * from "./hex.js"; // incl. randomSecret, assertStrongSecret (audit H5)
+export * from "./prover.js";
 
 export interface Proof {
   bytes: Uint8Array;
