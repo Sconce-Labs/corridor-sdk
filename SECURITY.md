@@ -1,9 +1,20 @@
-# Security
+# Security Policy
 
-## Reporting
+## Supported versions
 
-Open a private security advisory on the repo, or email the maintainers. Do not
-file a public issue for an exploitable vulnerability.
+Only the latest `main` branch of this repository is supported with security
+fixes.
+
+## Reporting a vulnerability
+
+**Please do not report security vulnerabilities through public GitHub issues.**
+
+Use GitHub's private vulnerability reporting: **Security → Report a
+vulnerability** on this repository (or open a private advisory). Include a
+description, reproduction steps, and your assessment of impact if possible.
+
+We will acknowledge reports within 7 days and aim to ship a fix within 90
+days. We credit reporters in the release notes unless you prefer anonymity.
 
 ## What this SDK does and does not touch
 
@@ -13,17 +24,17 @@ file a public issue for an exploitable vulnerability.
   process), never a third-party server.
 - **Reads (`getPolicy` / `isCleared` / `passes`) are simulation-only** — no
   account, no signature. Point `rpcUrl` at an RPC you trust; a malicious RPC
-  could lie about `isCleared`, so a corridor operator's payout contract should
-  ultimately do this check on-chain, not just in the SDK.
+  could lie about `is_cleared`, so a corridor operator's payout contract
+  should ultimately do this check on-chain, not just in the SDK.
 - **`enter` goes through a fee-sponsoring tx-relayer** so the holder's Stellar
-  account is not linked to the pass. The relayer sees the proof + public inputs
-  (all public) but not the witness. It cannot forge a pass.
+  account is not linked to the pass. The relayer sees the proof + public
+  inputs (all public) but not the witness. It cannot forge a pass.
 - **`holder_secret` is generated with a CSPRNG** — use `randomSecret()`;
   `assertStrongSecret()` rejects obviously weak values. Low entropy makes
   nullifiers grindable and weakens hiding.
-- **`issueCredential` / `sign` are issuer-side.** The issuer's Grumpkin private
-  key signs credential statements — protect it like any signing key; on
-  compromise, bump the credential epoch and drop the key from corridor
+- **`issueCredential` / `sign` are issuer-side.** The issuer's Grumpkin
+  private key signs credential statements — protect it like any signing key;
+  on compromise, bump the credential epoch and drop the key from corridor
   allowlists.
 
 ## Never
