@@ -41,7 +41,7 @@
     "url": "https://github.com/Sconce-Labs/corridor-sdk"
   },
   "dependencies": {
-    "@noble/curves": "^1.9.7",
+    "@noble/curves": "^2.4.0",
     "@stellar/stellar-sdk": "^13.0.0",
     "@zkpassport/poseidon2": "^0.6.2"
   },
